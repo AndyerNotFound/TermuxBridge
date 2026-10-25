@@ -81,6 +81,7 @@ public final class Dispatcher {
         if (cmd.startsWith("shot.")) return "screenshot";
         if ("record".equals(cmd)) return "stt";
         if ("tap".equals(cmd) || "swipe".equals(cmd) || "ui".equals(cmd) || "a11y".equals(cmd)) return "touch";
+        if (cmd.startsWith("text.")) return "touch";
         if ("share".equals(cmd) || "open".equals(cmd) || "dial".equals(cmd) || "sms".equals(cmd)) return "share";
         return cmd;
     }

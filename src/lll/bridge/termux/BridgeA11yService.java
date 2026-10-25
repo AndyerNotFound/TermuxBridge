@@ -10,6 +10,7 @@ import android.os.Build;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -107,6 +108,83 @@ public class BridgeA11yService extends AccessibilityService {
     }
 
     /** 导出当前窗口 UI 树(可用于"Layout 渲染"分析/自动化定位)。 */
+    /** 直接写焦点输入框(不依赖输入法) */
+    static boolean setText(String text) {
+        BridgeA11yService svc = INSTANCE;
+        if (svc == null) return false;
+        AccessibilityNodeInfo target = findTarget(svc);
+        if (target == null) return false;
+        android.os.Bundle b = new android.os.Bundle();
+        b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+        return target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b);
+    }
+
+    /** 读取焦点输入框文本 */
+    static String getFocusedText() {
+        BridgeA11yService svc = INSTANCE;
+        if (svc == null) return null;
+        AccessibilityNodeInfo t = findTarget(svc);
+        if (t == null || t.getText() == null) return null;
+        return t.getText().toString();
+    }
+
+    /** 诊断: 看得到几个窗口 / 几个可编辑节点 */
+    static JSONObject diagnose() throws Exception {
+        JSONObject o = new JSONObject();
+        BridgeA11yService svc = INSTANCE;
+        if (svc == null) return o;
+        JSONArray wins = new JSONArray();
+        try {
+            for (AccessibilityWindowInfo w : svc.getWindows()) {
+                AccessibilityNodeInfo r = w.getRoot();
+                int n = 0;
+                if (r != null) n = countEditable(r, 0);
+                wins.put(new JSONObject()
+                        .put("type", w.getType())
+                        .put("active", w.isActive())
+                        .put("focused", w.isFocused())
+                        .put("editable", n));
+            }
+            o.put("windows", wins);
+            AccessibilityNodeInfo f = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+            o.put("focus_input", f == null ? "" : String.valueOf(f.getClassName()));
+        } catch (Exception e) { o.put("error", e.toString()); }
+        return o;
+    }
+
+    private static int countEditable(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 30) return 0;
+        int c = n.isEditable() ? 1 : 0;
+        for (int i = 0; i < n.getChildCount(); i++) c += countEditable(n.getChild(i), d + 1);
+        return c;
+    }
+
+    /** 先找焦点输入框, 再遍历所有窗口找可编辑节点 */
+    private static AccessibilityNodeInfo findTarget(BridgeA11yService svc) {
+        AccessibilityNodeInfo t = null;
+        try { t = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT); } catch (Throwable ignored) {}
+        if (t != null && t.isEditable()) return t;
+        try {
+            for (AccessibilityWindowInfo w : svc.getWindows()) {
+                AccessibilityNodeInfo r = w.getRoot();
+                AccessibilityNodeInfo e = findEditable(r, 0);
+                if (e != null) return e;
+            }
+        } catch (Throwable ignored) {}
+        return findEditable(svc.getRootInActiveWindow(), 0);
+    }
+
+    private static AccessibilityNodeInfo findEditable(AccessibilityNodeInfo n, int depth) {
+        if (n == null || depth > 30) return null;
+        if (n.isEditable() && n.isVisibleToUser()) return n;
+        for (int i = 0; i < n.getChildCount(); i++) {
+            AccessibilityNodeInfo c = n.getChild(i);
+            AccessibilityNodeInfo r = findEditable(c, depth + 1);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
     static JSONArray dumpTree(int maxDepth) {
         BridgeA11yService svc = INSTANCE;
         JSONArray out = new JSONArray();

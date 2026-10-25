@@ -110,6 +110,7 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
 
   输入/内容
     tbridge-ime status|commit TEXT|show|hide|pick
+    tbridge-text TEXT | tbridge-text -g     # 直接写/读焦点输入框(不依赖输入法)
     tbridge-media [image|video] [N]
     tbridge-role list|request dialer|sms|home
 
@@ -180,6 +181,14 @@ cmd_clipboard_set() {
   sleep 0.8
   send "$(printf '{%s"cmd":"clip.write","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
   printf 'ok\n'
+}
+
+cmd_text() {
+  if [ "${1:-}" = "-g" ]; then
+    send "$(printf '{%s"cmd":"text.get"}' "$(tok)")" | okcheck | out '.text'
+  else
+    send "$(printf '{%s"cmd":"text.set","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck | out '.len'
+  fi
 }
 
 cmd_ime() {
@@ -399,13 +408,13 @@ PYEOF
       ;;
     tree)   send "$(printf '{%s"cmd":"overlay.tree","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.nodes[]|"\(.depth) \(.cls) id=\(.id) \(.x),\(.y) \(.w)x\(.h)"' ;;
     hide|close) send "$(printf '{%s"cmd":"overlay.hide","id":"%s"}' "$(tok)" "${1:-all}")" | okcheck >/dev/null; printf 'hidden\n' ;;
-    events) send "$(printf '{%s"cmd":"overlay.events"}' "$(tok)")" | okcheck | out '.events' ;;
+    events) send "$(printf '{%s"cmd":"overlay.events","since":%s,"clear":%s}' "$(tok)" "${1:-0}" "${2:-false}")" | okcheck | out '.events' ;;
     values) send "$(printf '{%s"cmd":"overlay.values","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.values' ;;
     list)   send "$(printf '{%s"cmd":"overlay.list"}' "$(tok)")" | okcheck | out '.windows' ;;
     bounds) send "$(printf '{%s"cmd":"overlay.bounds"}' "$(tok)")" | okcheck | out '.windows[]|"\(.id) x=\(.x) y=\(.y) w=\(.w) h=\(.h)"' ;;
     perm)   send "$(printf '{%s"cmd":"overlay.perm","request":true}' "$(tok)")" | okcheck | out '.granted' ;;
     demo)   cmd_overlay_show_demo ;;
-    *) die "用法: tbridge-overlay show|update|hide|events|values|list|bounds|tree|perm|demo" ;;
+    *) die "用法: tbridge-overlay show|update|hide|events [SINCE] [CLEAR]|values|list|bounds|tree|perm|demo" ;;
   esac
 }
 
@@ -522,6 +531,7 @@ case "$sub" in
   power) cmd_power "$@" ;;
   notif) cmd_notif "$@" ;;
   ime) cmd_ime "$@" ;;
+  text) cmd_text "$@" ;;
   media) cmd_media "$@" ;;
   role) cmd_role "$@" ;;
   theme) cmd_theme "$@" ;;

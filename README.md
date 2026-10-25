@@ -278,8 +278,41 @@ tbridge-widget pin       # 请求固定到桌面(需桌面支持, 实测返回 t
 
 ## 应用图标
 
-`res/mipmap-*/ic_launcher.png`（mdpi 48 → xxxhdpi 192），由 `Pictures/bili/1791346087705.png`
-居中裁方生成。APK 因此从 62 KB 增到 225 KB，图标占绝大部分。
+`tools/make_icon.py` 几何生成（深色圆角底 + 青色 `>_`），无字体/外部图片依赖，
+输出 mdpi 48 → xxxhdpi 192 五档。APK 从 230 KB 回落到 **91 KB**。
+
+## 界面安全区（状态栏避让）
+
+targetSdk 36 强制 edge-to-edge，Activity 默认会画到状态栏下面。
+`MainActivity` 现在用 `setOnApplyWindowInsetsListener` 吃 systemBars / displayCutout / ime 三类 inset，
+标题不再被状态栏压住，输入法弹出时内容也会上移。
+
+悬浮窗本身不受影响：`APPLICATION_OVERLAY` 的坐标原点已在状态栏下方，
+实测 `y=0` 落在 141px（状态栏高度）。新增钳制：`x/y` 不允许为负，
+拖动与 `update` 都会被夹在可视区内（`y=-500dp` → 141px）。
+
+## 直接写输入框（不依赖输入法）
+
+```bash
+tbridge-text "要写入的内容"     # 写焦点输入框
+tbridge-text -g                # 读回来
+```
+
+走无障碍 `ACTION_SET_TEXT`，因此**Fcitx5 可以保持默认输入法**，不需要切到本应用的 IME。
+实测：Fcitx5 为默认时写入 8 字符并读回成功。找不到目标框时先 `text.debug` 看窗口/可编辑节点数量。
+
+## 悬浮窗事件游标
+
+`overlay.events` 原来读后清空，多个读者（daemon + 人）会互相抢事件。
+现在每条事件带 `seq`：
+
+```bash
+tbridge-overlay events 0        # 读全部, 不清空
+tbridge-overlay events 5        # 只读 seq > 5
+tbridge-overlay events 0 true   # 旧行为: 读后清空
+```
+
+不传参数时仍是"读后清空"，现有脚本不受影响。响应里带 `last_seq` 可当游标。
 
 ## 输入法（Termux 输入法）
 

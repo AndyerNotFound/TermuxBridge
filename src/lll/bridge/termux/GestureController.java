@@ -67,6 +67,10 @@ final class GestureController implements View.OnTouchListener {
                 downTime = SystemClock.uptimeMillis();
                 lastEmit = 0;
                 v.setPressed(true);
+                v.setAlpha(0.55f);          // 视觉反馈: 手指是否真的到了
+                android.util.Log.d("TBridgeTouch", "DOWN win=" + win + " id=" + id
+                        + " flags=" + Integer.toHexString(e.getFlags())
+                        + " x=" + (int) e.getX() + " y=" + (int) e.getY());
                 h.postDelayed(longPress, 500);
                 return true;
             case MotionEvent.ACTION_MOVE: {
@@ -91,6 +95,9 @@ final class GestureController implements View.OnTouchListener {
             case MotionEvent.ACTION_UP: {
                 h.removeCallbacks(longPress);
                 v.setPressed(false);
+                v.setAlpha(1f);
+                android.util.Log.d("TBridgeTouch", "UP win=" + win + " id=" + id
+                        + " flags=" + Integer.toHexString(e.getFlags()));
                 float dx = e.getX() - downX, dy = e.getY() - downY;
                 long dur = SystemClock.uptimeMillis() - downTime;
                 if (dragging) {
@@ -120,6 +127,9 @@ final class GestureController implements View.OnTouchListener {
             case MotionEvent.ACTION_CANCEL:
                 h.removeCallbacks(longPress);
                 v.setPressed(false);
+                v.setAlpha(1f);
+                android.util.Log.d("TBridgeTouch", "CANCEL win=" + win + " id=" + id
+                        + " flags=" + Integer.toHexString(e.getFlags()));
                 return true;
         }
         return false;

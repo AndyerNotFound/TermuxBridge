@@ -31,7 +31,25 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        setContentView(buildUi());
+        View content = buildUi();
+        setContentView(content);
+        applyInsets(content);
+    }
+
+    /** targetSdk 36 强制 edge-to-edge, 必须自己让开状态栏/导航栏/输入法 */
+    private void applyInsets(View v) {
+        final int basePad = 40;
+        if (Build.VERSION.SDK_INT >= 30) {
+            v.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets b = insets.getInsets(
+                        android.view.WindowInsets.Type.systemBars()
+                                | android.view.WindowInsets.Type.displayCutout()
+                                | android.view.WindowInsets.Type.ime());
+                view.setPadding(basePad + b.left, basePad + b.top,
+                        basePad + b.right, basePad + b.bottom);
+                return insets;
+            });
+        }
     }
 
     private View buildUi() {

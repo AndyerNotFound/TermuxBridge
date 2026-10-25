@@ -71,6 +71,22 @@ final class CmdsMedia {
             return Dispatcher.okPut("nodes", BridgeA11yService.dumpTree(p.optInt("depth", 12)));
         });
 
+        r.put("text.set", (ctx, p) -> {
+            if (!BridgeA11yService.ready()) return Dispatcher.err("accessibility service not enabled");
+            String text = p.optString("text", "");
+            boolean ok = BridgeA11yService.setText(text);
+            if (!ok) return Dispatcher.err("没有可写的输入框(先点一下目标框)");
+            return Dispatcher.ok().put("len", text.length()).put("via", "a11y");
+        });
+
+        r.put("text.debug", (ctx, p) -> Dispatcher.okPut("diag", BridgeA11yService.diagnose()));
+
+        r.put("text.get", (ctx, p) -> {
+            if (!BridgeA11yService.ready()) return Dispatcher.err("accessibility service not enabled");
+            String t = BridgeA11yService.getFocusedText();
+            return t == null ? Dispatcher.err("没有焦点输入框") : Dispatcher.okPut("text", t);
+        });
+
         r.put("a11y", (ctx, p) -> Dispatcher.ok()
                 .put("enabled", BridgeA11yService.ready()));
 

@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.provider.Settings;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Map;
@@ -50,7 +51,12 @@ final class CmdsOverlay {
             });
         });
 
-        r.put("overlay.events", (ctx, p) -> Dispatcher.okPut("events", OverlayManager.drain()));
+        r.put("overlay.events", (ctx, p) -> {
+            // 兼容旧行为: 不传参 = 读后清空; 传 since 则保留(可重复读)
+            boolean clear = p.has("clear") ? p.optBoolean("clear", true) : !p.has("since");
+            JSONArray ev = OverlayManager.read(p.optLong("since", 0), clear);
+            return Dispatcher.okPut("events", ev).put("last_seq", OverlayManager.lastSeq());
+        });
 
         r.put("overlay.values", (ctx, p) -> Dispatcher.okPut("values",
                 OverlayManager.values(p.optString("id", ""))));

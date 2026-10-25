@@ -55,18 +55,38 @@ public final class OverlayManager {
 
     static void pushEvent(JSONObject e) {
         synchronized (EVENTS) {
+            try { e.put("seq", ++SEQ); } catch (Exception ignored) {}
             EVENTS.addLast(e);
-            while (EVENTS.size() > 200) EVENTS.removeFirst();
+            while (EVENTS.size() > 500) EVENTS.removeFirst();
         }
     }
 
-    static JSONArray drain() {
+    private static long SEQ = 0;
+
+    static long lastSeq() { synchronized (EVENTS) { return SEQ; } }
+
+    /**
+     * 读取事件。since>0 时只返回该序号之后的事件; 默认不清空(可重复读),
+     * clear=true 才丢弃已读部分。避免多个读者(daemon + 人)互相抢事件。
+     */
+    static JSONArray read(long since, boolean clear) {
         JSONArray a = new JSONArray();
         synchronized (EVENTS) {
-            while (!EVENTS.isEmpty()) a.put(EVENTS.removeFirst());
+            long last = 0;
+            for (JSONObject o : EVENTS) {
+                long sq = o.optLong("seq", 0);
+                if (sq > since) { a.put(o); last = sq; }
+            }
+            if (clear) {
+                while (!EVENTS.isEmpty() && EVENTS.peekFirst().optLong("seq", 0) <= last)
+                    EVENTS.removeFirst();
+            }
         }
         return a;
     }
+
+    /** 兼容旧行为: 读后清空 */
+    static JSONArray drain() { return read(0, true); }
 
     static JSONObject show(Context ctx, JSONObject req) throws Exception {
         long t0 = System.nanoTime();
@@ -139,6 +159,7 @@ public final class OverlayManager {
                     float dx = ev.getRawX() - last[0], dy = ev.getRawY() - last[1];
                     if (Math.abs(dx) + Math.abs(dy) < 1) return true;
                     lp.x += (int) dx; lp.y += (int) dy;
+                    clamp(lp, root, wm);
                     last[0] = ev.getRawX(); last[1] = ev.getRawY();
                     try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
                     return true;
@@ -146,6 +167,23 @@ public final class OverlayManager {
             }
             return false;
         });
+    }
+
+    /** 限制在可视区内(悬浮窗坐标原点已在状态栏下方, 故下界为 0) */
+    private static void clamp(WindowManager.LayoutParams lp, View root, WindowManager wm) {
+        int w = root.getWidth() > 0 ? root.getWidth()
+                : (lp.width > 0 ? lp.width : 0);
+        int h = root.getHeight() > 0 ? root.getHeight()
+                : (lp.height > 0 ? lp.height : 0);
+        android.graphics.Rect b;
+        if (Build.VERSION.SDK_INT >= 30) b = wm.getCurrentWindowMetrics().getBounds();
+        else b = new android.graphics.Rect(0, 0,
+                root.getResources().getDisplayMetrics().widthPixels,
+                root.getResources().getDisplayMetrics().heightPixels);
+        int maxX = Math.max(0, b.width() - w);
+        int maxY = Math.max(0, b.height() - h - 140);
+        lp.x = Math.max(0, Math.min(lp.x, maxX));
+        lp.y = Math.max(0, Math.min(lp.y, maxY));
     }
 
     static void remove(Context ctx, String id) {
@@ -480,7 +518,7 @@ public final class OverlayManager {
             else { e.lp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND; e.lp.setBlurBehindRadius(dp(ctx, blur)); }
             moved = true;
         }
-        if (moved) wm.updateViewLayout(e.root, e.lp);
+        if (moved) { clamp(e.lp, e.root, wm); wm.updateViewLayout(e.root, e.lp); }
 
         e.layout = req;
         long ms = (System.nanoTime() - t0) / 1_000_000;
