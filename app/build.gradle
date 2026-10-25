@@ -1,0 +1,38 @@
+// TermuxBridge app module. CI-only; the zero-dep local pipeline is build.sh.
+apply plugin: 'com.android.application'
+
+
+android {
+    namespace 'lll.bridge.termux'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "lll.bridge.termux"
+        minSdk 28
+        // keep in sync with AndroidManifest.xml (single source of truth there)
+        targetSdk 36
+        versionCode 10
+        versionName "1.7.0"
+    }
+
+    signingConfigs {
+        release {
+            // CI: keystore + password come from secrets; local: fall back to env vars
+            storeFile file(project.findProperty("TBRIDGE_KS") ?: System.getenv("TBRIDGE_KS") ?: "${System.getProperty('user.home')}/.android/bridge.keystore")
+            storePassword System.getenv("TBRIDGE_KS_PASS") ?: "android"
+            keyAlias "bridge"
+            keyPassword System.getenv("TBRIDGE_KS_PASS") ?: "android"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.android.material:material:1.14.0'
+}

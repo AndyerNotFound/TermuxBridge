@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# 构建 TermuxBridge.apk (无需 gradle; 依赖 aapt2/d8/zipalign/apksigner/javac)
+# DEPRECATED since v1.7.0: the app now depends on Material Components, which the
+# zero-dep pipeline cannot link. Use the GitHub Actions build (gradle :app:assembleRelease).
+set -euo pipefail
+echo "build.sh is deprecated since v1.7.0 (Material Components dependency)." >&2
+echo "Build via GitHub Actions: push to main -> artifact 'TermuxBridge-apk'," >&2
+echo "or run 'gradle :app:assembleRelease' in a full Android build environment." >&2
+exit 1
 set -euo pipefail
 cd "$(dirname "$0")"
 

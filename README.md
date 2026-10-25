@@ -178,16 +178,16 @@ Note: writing to input fields usually does **not** need the IME at all — `tbri
 
 ## Build from source
 
-Build requires only local tools — `javac`, `aapt2`, `d8`, `zipalign`, `apksigner`, `keytool` (Termux: `pkg install openjdk-21 aapt aapt2 apksigner zipalign d8`). Only `android.jar` is needed from the SDK.
+Since v1.7.0 the app depends on [Material Components](https://github.com/material-components/material-components-android) (`com.google.android.material:material:1.14.0`), so it builds with Gradle. CI (`.github/workflows/build.yml`) builds on every push to `main` and uploads the APK as an artifact.
 
 ```bash
-export ANDROID_SDK=$HOME/android-sdk        # with platforms/android-36/android.jar
-export TBRIDGE_KS_PASS=your-pass            # generates ~/.android/bridge.keystore on first run
-./build.sh                                  # → build/TermuxBridge.apk
-./package.sh                                # → dist/tbridge_*_all.deb
+gradle :app:assembleRelease   # Gradle 8.13, AGP 8.9.1, JDK 17, compileSdk 36
+./package.sh                  # CLI deb is still packaged locally, no gradle needed
 ```
 
-The APK is self-signed. Keep the same keystore across releases or upgrades will require uninstall/reinstall.
+Signing: CI decodes the keystore from the `KEYSTORE_B64` secret (plus `TBRIDGE_KS_PASS`). Local builds read `TBRIDGE_KS` / `TBRIDGE_KS_PASS` (defaults: `~/.android/bridge.keystore`, alias `bridge`). The APK is self-signed — keep the same keystore across releases or upgrades require uninstall/reinstall.
+
+The legacy zero-dep pipeline (`build.sh`, aapt2/d8 by hand) is deprecated since v1.7.0 and exits with an error.
 
 ## Compatibility notes
 

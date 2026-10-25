@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Decode signing keystore
+        run: echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bridge.keystore"
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+
+      - name: Build release APK
+        run: gradle :app:assembleRelease "-PTBRIDGE_KS=$RUNNER_TEMP/bridge.keystore"
+        env:
+          TBRIDGE_KS_PASS: ${{ secrets.TBRIDGE_KS_PASS }}
+
+      - name: Verify signature
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs "$APK"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TermuxBridge-apk
+          path: app/build/outputs/apk/release/*.apk

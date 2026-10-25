@@ -437,14 +437,30 @@ public final class OverlayManager {
                 Button b = new Button(ctx);
                 b.setText(n.optString("text", "OK"));
                 b.setAllCaps(false);
-                b.setTextColor(n.optString("color", "").isEmpty()
-                        ? Color.WHITE : Util.color(n.optString("color"), Color.WHITE));
+                b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
                 b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 if (n.optString("bg", "").isEmpty()) {
-                    GradientDrawable g = new GradientDrawable();
-                    g.setColor(0x33FFFFFF);
-                    g.setCornerRadius(dp(ctx, 10));
-                    b.setBackground(g);
+                    // no explicit bg: use the Material filled-button style from the
+                    // app theme (MD3 look + dynamic color + ripple), no extra deps
+                    android.content.res.TypedArray ta = ctx.obtainStyledAttributes(
+                            new int[]{com.google.android.material.R.attr.materialButtonStyle});
+                    int styleId = ta.getResourceId(0, 0);
+                    ta.recycle();
+                    if (styleId != 0) {
+                        android.view.ContextThemeWrapper w =
+                                new android.view.ContextThemeWrapper(ctx, styleId);
+                        b = new com.google.android.material.button.MaterialButton(w);
+                        b.setText(n.optString("text", "OK"));
+                        b.setAllCaps(false);
+                        // re-apply props that ran on the discarded Button instance
+                        b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
+                        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                    } else {
+                        GradientDrawable g = new GradientDrawable();
+                        g.setColor(0x33FFFFFF);
+                        g.setCornerRadius(dp(ctx, 10));
+                        b.setBackground(g);
+                    }
                 }
                 common(b, n, ctx);
                 final String nid = n.optString("id", "");
@@ -457,8 +473,7 @@ public final class OverlayManager {
                 EditText et = new EditText(ctx);
                 et.setHint(n.optString("hint", ""));
                 et.setText(n.optString("text", ""));
-                et.setTextColor(n.optString("color", "").isEmpty()
-                        ? Color.BLACK : Util.color(n.optString("color"), Color.WHITE));
+                et.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.BLACK));
                 et.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 et.setInputType(n.optBoolean("multiline", false)
                         ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -482,8 +497,7 @@ public final class OverlayManager {
             }
             case "divider": {
                 View v = new View(ctx);
-                v.setBackgroundColor(n.optString("color", "").isEmpty()
-                        ? 0x33000000 : Util.color(n.optString("color"), Color.WHITE));
+                v.setBackgroundColor(MdcTheme.resolve(ctx, n.optString("color", ""), 0x33000000));
                 v.setMinimumHeight(Math.max(1, dp(ctx, n.optDouble("h", 1))));
                 return v;
             }
@@ -491,7 +505,7 @@ public final class OverlayManager {
             default: {
                 TextView tv = new TextView(ctx);
                 tv.setText(n.optString("text", ""));
-                tv.setTextColor(Color.parseColor(n.optString("color", "#FFFFFF")));
+                tv.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), 0xFFFFFFFF));
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 String align = n.optString("align", "");
                 if ("center".equals(align)) tv.setGravity(Gravity.CENTER);
@@ -566,8 +580,7 @@ public final class OverlayManager {
                     b.setText(label);
                     attachGC(b, newGC(ctx, wid, n, entry), entry);
                 }
-                b.setTextColor(n.optString("color", "").isEmpty()
-                        ? Color.WHITE : Util.color(n.optString("color"), Color.WHITE));
+                b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
                 b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 common(b, n, ctx);
                 return true;
@@ -592,8 +605,7 @@ public final class OverlayManager {
             }
             case "divider": {
                 if (!(v instanceof TextView) && v.getClass() != View.class) return false;
-                v.setBackgroundColor(n.optString("color", "").isEmpty()
-                        ? 0x33000000 : Util.color(n.optString("color"), 0x33000000));
+                v.setBackgroundColor(MdcTheme.resolve(ctx, n.optString("color", ""), 0x33000000));
                 v.setMinimumHeight(Math.max(1, dp(ctx, n.optDouble("h", 1))));
                 return true;
             }
@@ -608,7 +620,7 @@ public final class OverlayManager {
                 TextView tv = (TextView) v;
                 String t = n.optString("text", "");
                 if (!t.contentEquals(tv.getText())) tv.setText(t);
-                tv.setTextColor(Util.color(n.optString("color", ""), Color.WHITE));
+                tv.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 String align = n.optString("align", "");
                 tv.setGravity("center".equals(align) ? Gravity.CENTER

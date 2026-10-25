@@ -1,31 +1,28 @@
 package lll.bridge.termux;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class MainActivity extends Activity {
+public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     private static final int REQ_PERMS = 1;
 
     @Override
@@ -36,7 +33,7 @@ public class MainActivity extends Activity {
         applyInsets(content);
     }
 
-    /** targetSdk 36 强制 edge-to-edge, 必须自己让开状态栏/导航栏/输入法 */
+    /** targetSdk 36 enforces edge-to-edge; consume systemBars/cutout/ime insets manually */
     private void applyInsets(View v) {
         final int basePad = 40;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -63,9 +60,7 @@ public class MainActivity extends Activity {
         title.setPadding(0, 0, 0, 16);
         root.addView(title);
 
-        final Context ctx = this;
-
-        // 端口设置
+        // port setting
         LinearLayout portRow = new LinearLayout(this);
         portRow.setOrientation(LinearLayout.HORIZONTAL);
         final EditText portEt = new EditText(this);
@@ -74,7 +69,7 @@ public class MainActivity extends Activity {
         portEt.setHint("端口");
         portRow.addView(portEt, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        Button portBtn = new Button(this);
+        MaterialButton portBtn = new MaterialButton(this);
         portBtn.setText("保存端口");
         portBtn.setOnClickListener(v -> {
             int p = 0;
@@ -87,14 +82,14 @@ public class MainActivity extends Activity {
         portRow.addView(portBtn);
         root.addView(portRow);
 
-        // token 设置
+        // token setting
         LinearLayout tokRow = new LinearLayout(this);
         final EditText tokEt = new EditText(this);
         tokEt.setText(Prefs.token(this));
         tokEt.setHint("访问 token(可空 = 不校验)");
         tokRow.addView(tokEt, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        Button tokBtn = new Button(this);
+        MaterialButton tokBtn = new MaterialButton(this);
         tokBtn.setText("保存token");
         tokBtn.setOnClickListener(v -> {
             Prefs.setToken(this, tokEt.getText().toString().trim());
@@ -103,13 +98,13 @@ public class MainActivity extends Activity {
         tokRow.addView(tokBtn);
         root.addView(tokRow);
 
-        // 权限按钮
-        Button permBtn = new Button(this);
+        // permission buttons
+        MaterialButton permBtn = new MaterialButton(this);
         permBtn.setText("申请权限(位置/录音/通知)");
         permBtn.setOnClickListener(v -> requestPerms());
         root.addView(permBtn);
 
-        Button writeBtn = new Button(this);
+        MaterialButton writeBtn = new MaterialButton(this);
         writeBtn.setText("授予 系统设置修改(亮度)");
         writeBtn.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
@@ -118,7 +113,7 @@ public class MainActivity extends Activity {
         });
         root.addView(writeBtn);
 
-        Button ovBtn = new Button(this);
+        MaterialButton ovBtn = new MaterialButton(this);
         ovBtn.setText("授予悬浮窗权限");
         ovBtn.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -127,7 +122,7 @@ public class MainActivity extends Activity {
         });
         root.addView(ovBtn);
 
-        Button batBtn = new Button(this);
+        MaterialButton batBtn = new MaterialButton(this);
         batBtn.setText("忽略电池优化");
         batBtn.setOnClickListener(v -> {
             try {
@@ -140,14 +135,14 @@ public class MainActivity extends Activity {
         });
         root.addView(batBtn);
 
-        // 输入法测试
+        // IME test field
         final EditText imeTest = new EditText(this);
         imeTest.setHint("输入法测试框（点这里，再用 tbridge-ime commit 注入）");
         imeTest.setSingleLine(true);
         root.addView(imeTest);
 
-        // 服务控制
-        Button startBtn = new Button(this);
+        // service control
+        MaterialButton startBtn = new MaterialButton(this);
         startBtn.setText("启动服务");
         startBtn.setOnClickListener(v -> {
             startForegroundService(new Intent(this, BridgeService.class)
@@ -155,7 +150,7 @@ public class MainActivity extends Activity {
             toast("服务已请求启动");
         });
         root.addView(startBtn);
-        Button stopBtn = new Button(this);
+        MaterialButton stopBtn = new MaterialButton(this);
         stopBtn.setText("停止服务");
         stopBtn.setOnClickListener(v -> {
             startService(new Intent(this, BridgeService.class)
@@ -164,7 +159,7 @@ public class MainActivity extends Activity {
         });
         root.addView(stopBtn);
 
-        // 功能开关
+        // feature toggles
         TextView ft = new TextView(this);
         ft.setText("功能模块 (全部默认启用)");
         ft.setPadding(0, 40, 0, 8);
@@ -186,19 +181,15 @@ public class MainActivity extends Activity {
         names.put("share", "分享/打开/拨号/短信");
         names.put("screenshot", "截图");
         for (Map.Entry<String, String> e : names.entrySet()) {
-            String f = e.getKey();
-            if ("sensors".equals(f)) {
-                // sensors 覆盖 sensor.list / sensor.read 两个命令前缀
-            }
-            final String key = f;
+            final String key = e.getKey();
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             TextView label = new TextView(this);
             label.setText(e.getValue());
             row.addView(label, new LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            Switch sw = new Switch(this);
-            sw.setChecked(Prefs.enabled(this, f));
+            SwitchMaterial sw = new SwitchMaterial(this);
+            sw.setChecked(Prefs.enabled(this, key));
             sw.setOnCheckedChangeListener((btn, isChecked) -> {
                 Prefs.setEnabled(this, key, isChecked);
                 toast(e.getValue() + " 已" + (isChecked ? "启用" : "停用"));

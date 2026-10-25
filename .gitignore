@@ -1,11 +1,13 @@
-# 构建产物
+# build artifacts
 build/
+app/build/
 dist/
 *.apk
 *.dex
 *.class
 *.jar
 gen/
+.gradle/
 
 # 本地密钥与备份
 *.keystore
