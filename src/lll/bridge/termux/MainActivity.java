@@ -100,6 +100,15 @@ public class MainActivity extends Activity {
         });
         root.addView(writeBtn);
 
+        Button ovBtn = new Button(this);
+        ovBtn.setText("授予悬浮窗权限");
+        ovBtn.setOnClickListener(v -> {
+            Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        });
+        root.addView(ovBtn);
+
         // 服务控制
         Button startBtn = new Button(this);
         startBtn.setText("启动服务");

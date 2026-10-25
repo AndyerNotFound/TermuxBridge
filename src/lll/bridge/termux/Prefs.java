@@ -7,7 +7,7 @@ public final class Prefs {
     public static final String[] FEATURES = {
         "clipboard", "notify", "toast", "vibrate", "beep", "torch",
         "brightness", "volume", "battery", "net", "location", "sensors",
-        "tts", "stt", "share", "screenshot", "touch"
+        "tts", "stt", "share", "screenshot", "touch", "overlay"
     };
 
     private Prefs() {}

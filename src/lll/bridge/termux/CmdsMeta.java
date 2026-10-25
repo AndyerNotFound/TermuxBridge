@@ -9,9 +9,15 @@ import java.util.Map;
 final class CmdsMeta {
     private CmdsMeta() {}
 
+    private static String versionName(android.content.Context ctx) {
+        try {
+            return ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0).versionName;
+        } catch (Exception e) { return "?"; }
+    }
+
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("ping", (ctx, p) -> Dispatcher.ok()
-                .put("version", "1.0")
+                .put("version", versionName(ctx))
                 .put("sdk", android.os.Build.VERSION.SDK_INT)
                 .put("port", Prefs.port(ctx)));
 

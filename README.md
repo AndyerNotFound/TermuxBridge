@@ -140,6 +140,39 @@ cat build/TermuxBridge.apk | ~/Shizuku/rish -c "pm install -r -S $(stat -c%s bui
 
 未实现:通知监听、悬浮窗、VPN 服务、USB 独占。
 
+
+## 自定义悬浮窗
+
+用 JSON 描述布局，服务端动态构建 View 并叠加到屏幕。需要悬浮窗权限（设置 → 特殊应用权限 →
+显示在其他应用上层，或用 Shizuku：`appops set lll.bridge.termux SYSTEM_ALERT_WINDOW allow`）。
+
+```bash
+tbridge-overlay show card.json     # 或 tbridge-overlay demo 看示例
+tbridge-overlay bounds             # 查窗口真实屏幕坐标
+tbridge-overlay events             # 取点击事件(取走即清空)
+tbridge-overlay values <id>        # 读输入框内容
+tbridge-overlay hide [id|all]
+```
+
+布局节点：
+
+| type | 说明 |
+|---|---|
+| `col` / `row` | 垂直/水平容器，`children` 数组 |
+| `text` | 文本，`size` `color` `align` |
+| `button` | 按钮，`id` 用于回传事件，`text` |
+| `input` | 输入框，`hint` `multiline`，内容用 `overlay.values` 取 |
+| `progress` | 进度条，`max` `value` |
+| `divider` | 分隔线（默认高 1dp、宽填满） |
+| `spacer` | 空白占位（默认高 10dp） |
+
+通用属性：`w` `h`（数字=px，或 `wrap`/`match`）、`m` 外边距、`pad` 内边距、
+`bg` `radius` `alpha` `weight` `gravity`（窗口级：`top|start` 等）。
+点击事件形如 `{"type":"click","window":"demo","id":"ok","text":"确认","ts":...}`。
+
+注意：含 `divider`/`spacer` 的卡片若未指定 `w`，窗口宽度默认取 300dp，
+避免这类无固有宽度的节点把 `WRAP_CONTENT` 容器撑满屏幕。
+
 ## 安全
 
 - 只监听 `127.0.0.1`,不暴露到局域网

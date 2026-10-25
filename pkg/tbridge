@@ -276,6 +276,51 @@ cmd_screenshot() {
   printf '%s (%s bytes)\n' "$file" "$(stat -c%s "$file")"
 }
 
+cmd_overlay() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    show)
+      local tmp="${TMPDIR:-$PREFIX/tmp}"; mkdir -p "$tmp"
+      local jsonfile="$1"
+      if [ -z "$jsonfile" ] || [ "$jsonfile" = "-" ]; then
+        cat > "$tmp/tb_ov.json"
+      else
+        cp "$jsonfile" "$tmp/tb_ov.json"
+      fi
+      python3 - "$tmp/tb_ov.json" <<'PYEOF'
+import json,sys
+d=json.load(open(sys.argv[1]))
+d["cmd"]="overlay.show"
+open(sys.argv[1],"w").write(json.dumps(d,ensure_ascii=False))
+PYEOF
+      send "$(cat "$tmp/tb_ov.json")" | okcheck | out '.id'
+      ;;
+    hide|close) send "$(printf '{%s"cmd":"overlay.hide","id":"%s"}' "$(tok)" "${1:-all}")" | okcheck >/dev/null; printf 'hidden\n' ;;
+    events) send "$(printf '{%s"cmd":"overlay.events"}' "$(tok)")" | okcheck | out '.events' ;;
+    values) send "$(printf '{%s"cmd":"overlay.values","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.values' ;;
+    list)   send "$(printf '{%s"cmd":"overlay.list"}' "$(tok)")" | okcheck | out '.windows' ;;
+    bounds) send "$(printf '{%s"cmd":"overlay.bounds"}' "$(tok)")" | okcheck | out '.windows[]|"\(.id) x=\(.x) y=\(.y) w=\(.w) h=\(.h)"' ;;
+    perm)   send "$(printf '{%s"cmd":"overlay.perm","request":true}' "$(tok)")" | okcheck | out '.granted' ;;
+    demo)   cmd_overlay_show_demo ;;
+    *) die "用法: tbridge-overlay show|hide|events|values|list|bounds|perm|demo" ;;
+  esac
+}
+
+cmd_overlay_show_demo() {
+  cat > "${TMPDIR:-$PREFIX/tmp}/tb_demo.json" <<'JSON'
+{"id":"demo","x":16,"y":120,"gravity":"top|start","view":
+ {"type":"col","bg":"#CC101418","pad":14,"radius":14,"children":[
+   {"type":"text","text":"TermuxBridge","size":15,"color":"#00E676"},
+   {"type":"text","text":"悬浮窗已生效","size":12,"color":"#CCFFFFFF","m":4},
+   {"type":"divider","color":"#33FFFFFF","m":6},
+   {"type":"row","children":[
+      {"type":"button","id":"ok","text":"确认","m":2},
+      {"type":"button","id":"cancel","text":"取消","m":2}]}
+ ]}}
+JSON
+  cmd_overlay show "${TMPDIR:-$PREFIX/tmp}/tb_demo.json"
+}
+
 cmd_tap() { [ $# -ge 2 ] || die "用法: tbridge-tap X Y"
   send "$(printf '{%s"cmd":"tap","x":%s,"y":%s}' "$(tok)" "$1" "$2")" | okcheck >/dev/null; printf 'ok\n'; }
 
@@ -370,6 +415,7 @@ case "$sub" in
   open) cmd_open "$@" ;;
   dial) cmd_dial "$@" ;;
   sms-send) cmd_sms_send "$@" ;;
+  overlay) cmd_overlay "$@" ;;
   screenshot) cmd_screenshot "$@" ;;
   tap) cmd_tap "$@" ;;
   swipe) cmd_swipe "$@" ;;
