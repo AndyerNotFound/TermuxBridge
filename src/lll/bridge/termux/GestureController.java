@@ -68,9 +68,11 @@ final class GestureController implements View.OnTouchListener {
                 lastEmit = 0;
                 v.setPressed(true);
                 v.setAlpha(0.55f);          // 视觉反馈: 手指是否真的到了
-                android.util.Log.d("TBridgeTouch", "DOWN win=" + win + " id=" + id
+                if (OverlayManager.TOUCH_LOG) { android.util.Log.d("TBridgeTouch", "DOWN win=" + win + " id=" + id
+                        + " dev=" + e.getDeviceId() + " src=0x" + Integer.toHexString(e.getSource())
+                        + " tool=" + e.getToolType(0)
                         + " flags=" + Integer.toHexString(e.getFlags())
-                        + " x=" + (int) e.getX() + " y=" + (int) e.getY());
+                        + " x=" + (int) e.getX() + " y=" + (int) e.getY()); }
                 h.postDelayed(longPress, 500);
                 return true;
             case MotionEvent.ACTION_MOVE: {

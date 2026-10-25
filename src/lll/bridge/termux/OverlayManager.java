@@ -43,6 +43,7 @@ public final class OverlayManager {
         WindowManager.LayoutParams lp;
         JSONObject layout;
         Map<String, EditText> inputs = new LinkedHashMap<>();
+        boolean trace;
     }
 
     static boolean granted(Context c) {
@@ -130,11 +131,24 @@ public final class OverlayManager {
         }
         lp.height = winDim(ctx, req, "h", -2);
 
-        if (req.optBoolean("drag_window", false)) attachWindowDrag(ctx, root, lp, wm);
+        entry.trace = req.optBoolean("trace", false);
+        // 根节点自己有 on 时不能挂别的 OnTouchListener, 否则会顶掉 GestureController
+        JSONObject rootNode = req.optJSONObject("view") != null ? req.optJSONObject("view") : req;
+        boolean rootOwns = rootNode.optJSONObject("on") != null;
+        if (rootOwns) {
+            // 手势已在 build() 里挂到根上; 拖动窗口则交给 GestureController 的 drag 事件
+        } else if (req.optBoolean("drag_window", false)) {
+            attachWindowDrag(ctx, root, lp, wm, id, entry.trace);
+        } else {
+            // 兜底: 没有子节点消费时也能看到事件是否到达窗口
+            root.setOnTouchListener((v, ev) -> { logTouch(id, ev, entry.trace); return false; });
+        }
 
         entry.root = root;
         entry.lp = lp;
         entry.layout = req;
+        if (TOUCH_LOG) android.util.Log.d("TBridgeTouch", "ADD id=" + id + " flags=0x"
+                + Integer.toHexString(lp.flags) + " " + lp.width + "x" + lp.height);
         wm.addView(root, lp);
         WINDOWS.put(id, entry);
 
@@ -148,9 +162,11 @@ public final class OverlayManager {
 
     /** 按住窗口空白处拖动整个悬浮窗 */
     private static void attachWindowDrag(Context ctx, View root,
-                                         WindowManager.LayoutParams lp, WindowManager wm) {
+                                         WindowManager.LayoutParams lp, WindowManager wm,
+                                         String id, boolean trace) {
         final float[] last = new float[2];
         root.setOnTouchListener((v, ev) -> {
+            logTouch(id, ev, trace);
             switch (ev.getActionMasked()) {
                 case android.view.MotionEvent.ACTION_DOWN:
                     last[0] = ev.getRawX(); last[1] = ev.getRawY();
@@ -167,6 +183,39 @@ public final class OverlayManager {
             }
             return false;
         });
+    }
+
+    /** 窗口级触摸日志: 与节点级(GestureController)分开, 用于判断事件有没有到达窗口 */
+    /** 触摸日志开关(默认开, 排查完可关) */
+    public static volatile boolean TOUCH_LOG = true;
+
+    static void logTouch(String id, android.view.MotionEvent ev, boolean trace) {
+        try {
+            int i = ev.getActionIndex();
+            if (i < 0 || i >= ev.getPointerCount()) i = 0;
+            if (trace) {
+                org.json.JSONObject o = new org.json.JSONObject();
+                String a = android.view.MotionEvent.actionToString(ev.getActionMasked());
+                o.put("type", "win:" + a.replace("ACTION_", "").toLowerCase(java.util.Locale.ROOT));
+                o.put("id", id);
+                o.put("dev", ev.getDeviceId());
+                o.put("src", "0x" + Integer.toHexString(ev.getSource()));
+                o.put("tool", ev.getToolType(i));
+                o.put("p", ev.getPointerCount());
+                o.put("x", (int) ev.getRawX());
+                o.put("y", (int) ev.getRawY());
+                pushEvent(o);
+            }
+            String tag = "WIN-" + id;
+            android.util.Log.d("TBridgeTouch", tag
+                    + " a=" + android.view.MotionEvent.actionToString(ev.getActionMasked())
+                    + " dev=" + ev.getDeviceId()
+                    + " src=0x" + Integer.toHexString(ev.getSource())
+                    + " tool=" + ev.getToolType(i)
+                    + " p=" + ev.getPointerCount()
+                    + " fl=0x" + Integer.toHexString(ev.getFlags())
+                    + " at=" + (int) ev.getRawX() + "," + (int) ev.getRawY());
+        } catch (Throwable ignored) {}
     }
 
     /** 限制在可视区内(悬浮窗坐标原点已在状态栏下方, 故下界为 0) */
@@ -297,6 +346,11 @@ public final class OverlayManager {
                         ll.addView(cv, childLp(ctx, c));
                     }
                 }
+                if (n.optJSONObject("on") != null) {
+                    ll.setOnTouchListener(new GestureController(ctx, wid,
+                            n.optString("id", ""), n.optString("text", "")));
+                    ll.setClickable(true);
+                }
                 return ll;
             }
             case "button": {
@@ -363,7 +417,8 @@ public final class OverlayManager {
                 if ("center".equals(align)) tv.setGravity(Gravity.CENTER);
                 else if ("end".equals(align)) tv.setGravity(Gravity.END);
                 common(tv, n, ctx);
-                if (!n.optString("id", "").isEmpty())
+                // 只有声明了 on 的节点才接手势; 否则让触摸冒泡给父容器
+                if (!n.optString("id", "").isEmpty() && n.optJSONObject("on") != null)
                     tv.setOnTouchListener(new GestureController(ctx, wid,
                             n.optString("id"), n.optString("text")));
                 return tv;
@@ -383,6 +438,7 @@ public final class OverlayManager {
             chh = dim(ctx, c, "h", ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cw, chh);
+        if (c.has("gravity")) lp.gravity = gravity(c.optString("gravity"));
         int m = dp(ctx, c.optDouble("m", 0));
         lp.setMargins(m, m, m, m);
         if (c.optDouble("weight", 0) > 0) lp.weight = (float) c.optDouble("weight");

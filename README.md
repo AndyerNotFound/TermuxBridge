@@ -301,6 +301,26 @@ tbridge-text -g                # 读回来
 走无障碍 `ACTION_SET_TEXT`，因此**Fcitx5 可以保持默认输入法**，不需要切到本应用的 IME。
 实测：Fcitx5 为默认时写入 8 字符并读回成功。找不到目标框时先 `text.debug` 看窗口/可编辑节点数量。
 
+## 触摸归属（v1.5.1 修正）
+
+三条规则：
+
+1. **谁有 `on` 谁接手势**。没有 `on` 的节点不拦截触摸，事件冒泡给父容器。
+   所以「球」应该是带 `on` 的容器节点，点圆的任意位置都算点中它。
+2. **根节点有 `on` 时不要再指望 `drag_window`**。两者抢同一个 `OnTouchListener` 槽位，
+   根节点的手势优先。要拖动请监听 `drag:start/move/end` 自己算位置。
+3. **对齐用两套属性**：子节点在容器里的位置用 `gravity`（配 `w:"match"`），
+   文字在自身框内的位置用 `align`。
+
+排查开关：`overlay.show` 加 `"trace":true`，窗口级触摸会写进事件流：
+
+```bash
+tbridge-overlay events 0        # 会看到 win:down / win:move / win:up
+```
+
+`dev=-1` 是注入事件（`input tap`），`dev=5` 这类正数是真实触摸屏。
+窗口能收到事件、但没有 `click`，就是归属问题；窗口压根收不到，才是输入链路问题。
+
 ## 悬浮窗事件游标
 
 `overlay.events` 原来读后清空，多个读者（daemon + 人）会互相抢事件。
