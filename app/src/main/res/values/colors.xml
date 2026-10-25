@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material Components baseline (API 28-30). API 31+ overrides these in
+         values-v31/colors.xml with the system dynamic-color (Material You) palette. -->
+    <color name="tb_primary">#FF6750A4</color>
+    <color name="tb_on_primary">#FFFFFFFF</color>
+    <color name="tb_primary_container">#FFEADDFF</color>
+    <color name="tb_on_primary_container">#FF21005D</color>
+    <color name="tb_secondary">#FF625B71</color>
+    <color name="tb_on_secondary">#FFFFFFFF</color>
+    <color name="tb_surface">#FFFEF7FF</color>
+    <color name="tb_on_surface">#FF1D1B20</color>
+    <color name="tb_background">#FFFEF7FF</color>
+    <color name="tb_on_background">#FF1D1B20</color>
+    <color name="tb_surface_container">#FFF3EDF7</color>
+</resources>

@@ -15,9 +15,6 @@ gen/
 *.bak
 AndroidManifest.xml.bak
 
-# 误生成的空仓库
-main/
-
 # 编辑器
 .idea/
 .vscode/

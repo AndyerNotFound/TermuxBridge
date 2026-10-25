@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App theme: Material 3. On API 31+ the platform fills the dynamic-color
+         tokens from the wallpaper; on API 28-30 the Material Components fallback
+         values apply. -->
+    <style name="Theme.TBridge" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/tb_primary</item>
+        <item name="colorOnPrimary">@color/tb_on_primary</item>
+        <item name="colorPrimaryContainer">@color/tb_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/tb_on_primary_container</item>
+        <item name="colorSecondary">@color/tb_secondary</item>
+        <item name="colorOnSecondary">@color/tb_on_secondary</item>
+        <item name="colorSurface">@color/tb_surface</item>
+        <item name="colorOnSurface">@color/tb_on_surface</item>
+        <item name="android:colorBackground">@color/tb_background</item>
+        <item name="colorOnBackground">@color/tb_on_background</item>
+        <item name="colorSurfaceContainer">@color/tb_surface_container</item>
+    </style>
+
+    <style name="Theme.TBridge.Transparent" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>

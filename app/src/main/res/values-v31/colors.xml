@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- API 31+: Material You dynamic color from the wallpaper -->
+    <color name="tb_primary">@android:color/system_accent1_600</color>
+    <color name="tb_on_primary">@android:color/system_accent1_0</color>
+    <color name="tb_primary_container">@android:color/system_accent1_100</color>
+    <color name="tb_on_primary_container">@android:color/system_accent1_900</color>
+    <color name="tb_secondary">@android:color/system_accent2_600</color>
+    <color name="tb_on_secondary">@android:color/system_accent2_0</color>
+    <color name="tb_surface">@android:color/system_neutral1_10</color>
+    <color name="tb_on_surface">@android:color/system_neutral1_900</color>
+    <color name="tb_background">@android:color/system_neutral1_10</color>
+    <color name="tb_on_background">@android:color/system_neutral1_900</color>
+    <color name="tb_surface_container">@android:color/system_neutral2_50</color>
+</resources>
