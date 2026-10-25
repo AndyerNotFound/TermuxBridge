@@ -1,0 +1,22 @@
+# 构建产物
+build/
+dist/
+*.apk
+*.dex
+*.class
+*.jar
+gen/
+
+# 本地密钥与备份
+*.keystore
+*.jks
+*.bak
+AndroidManifest.xml.bak
+
+# 误生成的空仓库
+main/
+
+# 编辑器
+.idea/
+.vscode/
+*.swp

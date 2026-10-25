@@ -1,0 +1,392 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# tbridge — TermuxBridge CLI (Termux:API 风格多调用程序)
+# 通过本机 127.0.0.1 的 TermuxBridge APP 服务调用 Android 能力。
+# 每个命令 = 本程序的符号链接名, 如 tbridge-toast -> tbridge
+
+set -u
+PORT="${TBRIDGE_PORT:-8021}"
+HOST="${TBRIDGE_HOST:-127.0.0.1}"
+TOKEN="${TBRIDGE_TOKEN:-}"
+TIMEOUT="${TBRIDGE_TIMEOUT:-60}"
+RAW=0
+
+# 解析全局 --json(输出原始 JSON)
+args=()
+for a in "$@"; do
+  case "$a" in
+    --json|-j) RAW=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+set -- ${args[@]+"${args[@]}"}
+
+die() { printf 'tbridge: %s\n' "$*" >&2; exit 1; }
+
+send() {
+  local payload="$1" resp
+  resp=$(printf '%s\n' "$payload" | nc -w "$TIMEOUT" "$HOST" "$PORT" 2>/dev/null)
+  [ -n "$resp" ] || die "无响应 — 检查 APP 是否『启动服务』, 端口=$PORT, token 是否匹配"
+  printf '%s\n' "$resp"
+}
+
+tok() { [ -n "$TOKEN" ] && printf '"token":"%s",' "$TOKEN"; }
+
+jstr() {
+  local s="$1"
+  s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+  printf '"%s"' "$s"
+}
+
+# 输出: RAW=1 打印原始 JSON, 否则按 jq 表达式取值
+out() {
+  local filter="${1:-.}"
+  if [ "$RAW" = 1 ] || ! command -v jq >/dev/null 2>&1; then
+    cat
+  else
+    jq -r "$filter"
+  fi
+}
+
+okcheck() {  # 读 stdin 的 JSON, 失败则报错退出
+  local body; body=$(cat)
+  if command -v jq >/dev/null 2>&1 && ! printf '%s' "$body" | jq -e '.ok==true' >/dev/null 2>&1; then
+    printf 'tbridge: %s\n' "$(printf '%s' "$body" | jq -r '.error // "unknown error"')" >&2
+    exit 1
+  fi
+  printf '%s' "$body"
+}
+
+usage() {
+  cat <<'EOF'
+tbridge — TermuxBridge 命令行 (Termux:API 风格)
+
+  消息
+    tbridge-toast [-d long] TEXT
+    tbridge-notification [-t 标题] [-c 内容] [-i id]
+    tbridge-vibrate [-d 毫秒]
+    tbridge-beep [beep|success|error]
+    tbridge-tts-speak TEXT
+
+  剪贴板
+    tbridge-clipboard-get
+    tbridge-clipboard-set [TEXT]      (无参数读 stdin)
+
+  状态
+    tbridge-battery-status
+    tbridge-net-status
+    tbridge-wifi-connectioninfo
+    tbridge-location
+    tbridge-sensor -l | -s NAME
+    tbridge-features
+    tbridge-feature on|off NAME
+
+  硬件
+    tbridge-torch on|off
+    tbridge-brightness [0-255]
+    tbridge-volume [STREAM [0-MAX]]
+
+  交互
+    tbridge-share [TEXT|-]            (- 读 stdin)
+    tbridge-open URL
+    tbridge-dial NUM
+    tbridge-sms-send NUM [TEXT]
+
+  屏幕/输入
+    tbridge-screenshot FILE
+    tbridge-tap X Y
+    tbridge-swipe X1 Y1 X2 Y2 [MS]
+    tbridge-ui [DEPTH]
+
+  语音
+    tbridge-record SECONDS [FILE]
+    tbridge-stt [语言]
+
+  服务
+    tbridge-service start|stop|status
+    tbridge-ping
+
+全局: --json 输出原始 JSON; 环境变量 TBRIDGE_PORT/TBRIDGE_HOST/TBRIDGE_TOKEN/TBRIDGE_TIMEOUT
+EOF
+}
+
+cmd_toast() {
+  local dur=short
+  while [ $# -gt 0 ]; do case "$1" in
+    -d|--duration) dur="$2"; shift 2 ;;
+    *) break ;; esac; done
+  [ $# -ge 1 ] || die "缺文本"
+  send "$(printf '{%s"cmd":"toast","text":%s,"duration":"%s"}' "$(tok)" "$(jstr "$*")" "$dur")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_notification() {
+  local title="TermuxBridge" content="" id=""
+  while [ $# -gt 0 ]; do case "$1" in
+    -t|--title) title="$2"; shift 2 ;;
+    -c|--content) content="$2"; shift 2 ;;
+    -i|--id) id="$2"; shift 2 ;;
+    *) content="$*"; break ;; esac; done
+  [ -n "$content" ] || die "缺内容 (-c)"
+  local idf=""; [ -n "$id" ] && idf="\"id\":$id,"
+  send "$(printf '{%s"cmd":"notify",%s"title":%s,"text":%s}' "$(tok)" "$idf" "$(jstr "$title")" "$(jstr "$content")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_vibrate() {
+  local ms=300
+  [ "${1:-}" = "-d" ] && { ms="$2"; shift 2; }
+  send "$(printf '{%s"cmd":"vibrate","ms":%s}' "$(tok)" "$ms")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_beep() {
+  send "$(printf '{%s"cmd":"beep","type":"%s"}' "$(tok)" "${1:-beep}")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_tts_speak() {
+  [ $# -ge 1 ] || die "缺文本"
+  send "$(printf '{%s"cmd":"tts","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_clipboard_get() {
+  # 读取需窗口焦点: 先拉起透明 Activity
+  am start -n lll.bridge.termux/.ClipCatchActivity >/dev/null 2>&1
+  sleep 0.6
+  send "$(printf '{%s"cmd":"clip.read"}' "$(tok)")" | okcheck | out '.text'
+}
+
+cmd_clipboard_set() {
+  local text
+  if [ $# -ge 1 ] && [ "$1" != "-" ]; then text="$*"; else text="$(cat)"; fi
+  am start -n lll.bridge.termux/.ClipCatchActivity --es write "$text" >/dev/null 2>&1
+  sleep 0.8
+  send "$(printf '{%s"cmd":"clip.write","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_battery_status() { send "$(printf '{%s"cmd":"battery"}' "$(tok)")" | okcheck | out . ; }
+
+cmd_net_status() { send "$(printf '{%s"cmd":"net"}' "$(tok)")" | okcheck | out . ; }
+
+cmd_wifi_connectioninfo() {
+  send "$(printf '{%s"cmd":"net"}' "$(tok)")" | okcheck
+}
+
+cmd_location() { send "$(printf '{%s"cmd":"location"}' "$(tok)")" | okcheck | out . ; }
+
+cmd_sensor() {
+  local mode="read" name="accelerometer"
+  while [ $# -gt 0 ]; do case "$1" in
+    -l|--list) mode="list"; shift ;;
+    -s|--sensor) name="$2"; shift 2 ;;
+    *) name="$1"; shift ;; esac; done
+  if [ "$mode" = "list" ]; then
+    send "$(printf '{%s"cmd":"sensor.list"}' "$(tok)")" | okcheck | out '.sensors[]|"\(.str)\t\(.name)"'
+  else
+    send "$(printf '{%s"cmd":"sensor.read","sensor":"%s"}' "$(tok)" "$name")" | okcheck | out '.values|@csv'
+  fi
+}
+
+cmd_features() { send "$(printf '{%s"cmd":"features"}' "$(tok)")" | okcheck | out '.|del(.ok)'; }
+
+cmd_feature() {
+  local on=1
+  case "${1:-}" in on|enable) on=1 ;; off|disable) on=0 ;; *) die "用法: tbridge-feature on|off NAME" ;; esac
+  [ -n "${2:-}" ] || die "缺模块名"
+  send "$(printf '{%s"cmd":"feature","name":"%s","enable":%s}' "$(tok)" "$2" "$([ $on = 1 ] && echo true || echo false)")" | okcheck >/dev/null
+  printf '%s = %s\n' "$2" "$([ $on = 1 ] && echo on || echo off)"
+}
+
+cmd_torch() {
+  case "${1:-on}" in on) a=on ;; off) a=off ;; *) die "用法: tbridge-torch on|off" ;; esac
+  send "$(printf '{%s"cmd":"torch","action":"%s"}' "$(tok)" "$a")" | okcheck >/dev/null
+  printf 'torch %s\n' "$a"
+}
+
+cmd_brightness() {
+  if [ $# -ge 1 ]; then
+    local v="$1"; [ "$v" -ge 0 ] 2>/dev/null || die "亮度需 0-255"
+    send "$(printf '{%s"cmd":"bright","action":"write","value":%s}' "$(tok)" "$v")" | okcheck | out '.value'
+  else
+    send "$(printf '{%s"cmd":"bright"}' "$(tok)")" | okcheck | out '.value'
+  fi
+}
+
+cmd_volume() {
+  local stream="${1:-notification}"
+  if [ $# -ge 2 ]; then
+    send "$(printf '{%s"cmd":"volume","action":"write","stream":"%s","value":%s}' "$(tok)" "$stream" "$2")" | okcheck | out '"\(.value)/\(.max)"'
+  else
+    send "$(printf '{%s"cmd":"volume","stream":"%s"}' "$(tok)" "$stream")" | okcheck | out '"\(.value)/\(.max)"'
+  fi
+}
+
+cmd_share() {
+  local text
+  if [ "${1:-}" = "-" ] || [ $# -eq 0 ]; then text="$(cat)"; else text="$*"; fi
+  send "$(printf '{%s"cmd":"share","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_open() {
+  [ -n "${1:-}" ] || die "缺 URL"
+  send "$(printf '{%s"cmd":"open","url":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_dial() {
+  [ -n "${1:-}" ] || die "缺号码"
+  send "$(printf '{%s"cmd":"dial","tel":"%s"}' "$(tok)" "$1")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_sms_send() {
+  [ -n "${1:-}" ] || die "缺号码"
+  local num="$1"; shift
+  send "$(printf '{%s"cmd":"sms","tel":"%s","text":%s}' "$(tok)" "$num" "$(jstr "${*:-}")")" | okcheck >/dev/null
+  printf 'ok\n'
+}
+
+cmd_screenshot() {
+  local file="${1:-shot_$(date +%Y%m%d_%H%M%S).png}"
+  local tmp="${TMPDIR:-$PREFIX/tmp}"; mkdir -p "$tmp"; local js="$tmp/tb_shot.json"
+  send "$(printf '{%s"cmd":"shot"}' "$(tok)")" > "$js" 2>/dev/null || true
+  # 无障碍不可用时回退 MediaProjection
+  if ! jq -e '.ok==true' "$js" >/dev/null 2>&1; then
+    local err; err=$(jq -r '.error // ""' "$js" 2>/dev/null)
+    case "$err" in
+      *"accessibility"*)
+        am start -n lll.bridge.termux/.ScreenshotActivity >/dev/null 2>&1
+        printf '需要截图授权, 请在弹窗中允许...\n' >&2
+        local i
+        for i in $(seq 1 30); do
+          sleep 2
+          send "$(printf '{%s"cmd":"shot.poll"}' "$(tok)")" > "$js"
+          jq -e '.ok==true' "$js" >/dev/null 2>&1 && break
+          case "$(jq -r '.error // ""' "$js")" in *pending*|*"no screenshot"*) continue ;; esac
+          break
+        done ;;
+      *) die "$err" ;;
+    esac
+  fi
+  jq -r '.png_b64' "$js" | base64 -d > "$file" || die "截屏失败"
+  printf '%s (%s bytes)\n' "$file" "$(stat -c%s "$file")"
+}
+
+cmd_tap() { [ $# -ge 2 ] || die "用法: tbridge-tap X Y"
+  send "$(printf '{%s"cmd":"tap","x":%s,"y":%s}' "$(tok)" "$1" "$2")" | okcheck >/dev/null; printf 'ok\n'; }
+
+cmd_swipe() { [ $# -ge 4 ] || die "用法: tbridge-swipe X1 Y1 X2 Y2 [MS]"
+  send "$(printf '{%s"cmd":"swipe","x1":%s,"y1":%s,"x2":%s,"y2":%s,"ms":%s}' "$(tok)" "$1" "$2" "$3" "$4" "${5:-300}")" | okcheck >/dev/null
+  printf 'ok\n'; }
+
+cmd_ui() { send "$(printf '{%s"cmd":"ui","depth":%s}' "$(tok)" "${1:-12}")" | okcheck | out '.nodes[]|"[\(.depth)] \(.cls) \(.text) \(.bounds)"'; }
+
+cmd_record() {
+  local sec="${1:-3}" file="${2:-rec_$(date +%Y%m%d_%H%M%S).wav}"
+  send "$(printf '{%s"cmd":"record","ms":%s}' "$(tok)" "$((sec*1000))")" \
+    | okcheck | out '.wav_b64' | base64 -d > "$file"
+  printf '%s (%s bytes)\n' "$file" "$(stat -c%s "$file")"
+}
+
+cmd_stt() {
+  am start -n lll.bridge.termux/.SttActivity >/dev/null 2>&1
+  printf '请说话...\n' >&2
+  local i
+  for i in $(seq 1 40); do
+    sleep 1
+    local body; body=$(send "$(printf '{%s"cmd":"stt.poll"}' "$(tok)")")
+    if printf '%s' "$body" | jq -e '.ok==true' >/dev/null 2>&1; then
+      printf '%s' "$body" | out '.text'; exit 0
+    fi
+    case "$body" in *pending*|*"no stt"*) continue ;; esac
+    printf '%s' "$body" | jq -r '.error // .' >&2
+  done
+  die "语音识别超时"
+}
+
+alive() { printf '{"cmd":"ping"}' | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1; }
+
+cmd_service() {
+  local rish="$HOME/Shizuku/rish"
+  case "${1:-status}" in
+    start)
+      am start-foreground-service -n lll.bridge.termux/.BridgeService -a lll.bridge.START >/dev/null 2>&1
+      sleep 1
+      alive || { [ -x "$rish" ] && "$rish" -c "am start-foreground-service -n lll.bridge.termux/.BridgeService -a lll.bridge.START" >/dev/null 2>&1; sleep 3; }
+      if alive; then printf '服务已启动\n'; else
+        printf '启动失败: 请打开 TermuxBridge APP 点「启动服务」, 或确认 Shizuku 可用\n' >&2; exit 1
+      fi ;;
+    stop)
+      am startservice -n lll.bridge.termux/.BridgeService -a lll.bridge.STOP >/dev/null 2>&1
+      sleep 1
+      [ -x "$rish" ] && ! alive || true
+      "$rish" -c "am force-stop lll.bridge.termux" >/dev/null 2>&1 || true
+      alive && { printf '停止失败\n' >&2; exit 1; } || printf '服务已停止\n' ;;
+    status)
+      if alive; then
+        send "$(printf '{%s"cmd":"ping"}' "$(tok)")" | okcheck | out '"服务运行中 port=\(.port) sdk=\(.sdk)"'
+      else
+        printf '服务未运行\n'; exit 1
+      fi ;;
+    *) die "用法: tbridge-service start|stop|status" ;;
+  esac
+}
+
+cmd_ping() { send "$(printf '{%s"cmd":"ping"}' "$(tok)")" | okcheck | out . ; }
+
+# ---- 分发: 先看调用名(符号链接), 再看第一个参数 ----
+me=$(basename "$0")
+case "$me" in
+  tbridge|tb)  sub="${1:-}"; [ $# -gt 0 ] && shift ;;
+  tbridge-*)   sub="${me#tbridge-}" ;;
+  *)           sub="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+[ -z "$sub" ] && { usage; exit 0; }
+
+case "$sub" in
+  help|-h|--help) usage ;;
+  toast) cmd_toast "$@" ;;
+  notification) cmd_notification "$@" ;;
+  vibrate) cmd_vibrate "$@" ;;
+  beep) cmd_beep "$@" ;;
+  tts-speak) cmd_tts_speak "$@" ;;
+  clipboard-get) cmd_clipboard_get "$@" ;;
+  clipboard-set) cmd_clipboard_set "$@" ;;
+  battery-status) cmd_battery_status "$@" ;;
+  net-status) cmd_net_status "$@" ;;
+  wifi-connectioninfo) cmd_wifi_connectioninfo "$@" ;;
+  location) cmd_location "$@" ;;
+  sensor) cmd_sensor "$@" ;;
+  features) cmd_features "$@" ;;
+  feature) cmd_feature "$@" ;;
+  torch) cmd_torch "$@" ;;
+  brightness) cmd_brightness "$@" ;;
+  volume) cmd_volume "$@" ;;
+  share) cmd_share "$@" ;;
+  open) cmd_open "$@" ;;
+  dial) cmd_dial "$@" ;;
+  sms-send) cmd_sms_send "$@" ;;
+  screenshot) cmd_screenshot "$@" ;;
+  tap) cmd_tap "$@" ;;
+  swipe) cmd_swipe "$@" ;;
+  ui) cmd_ui "$@" ;;
+  record) cmd_record "$@" ;;
+  stt) cmd_stt "$@" ;;
+  service) cmd_service "$@" ;;
+  ping) cmd_ping "$@" ;;
+  # --- 短名别名(兼容 tb 风格) ---
+  battery) cmd_battery_status "$@" ;;
+  net) cmd_net_status "$@" ;;
+  notify) cmd_notification "$@" ;;
+  clip) cmd_clipboard_get "$@" ;;
+  clip-set) cmd_clipboard_set "$@" ;;
+  tts) cmd_tts_speak "$@" ;;
+  shot) cmd_screenshot "$@" ;;
+  sens) cmd_sensor "$@" ;;
+  svc) cmd_service "$@" ;;
+  *) die "未知命令: $sub (tbridge help 查看)" ;;
+esac

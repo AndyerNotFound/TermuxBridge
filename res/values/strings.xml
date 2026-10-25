@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="acc_desc">TermuxBridge 无障碍服务: 提供截图、模拟点击/滑动、界面树导出。仅由本机 Termux 通过 127.0.0.1 调用, 不联网。</string>
+</resources>

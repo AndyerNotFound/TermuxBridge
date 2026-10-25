@@ -1,0 +1,19 @@
+.TH TBRIDGE 1 "2026-10-26" "tbridge 1.0.0" "TermuxBridge"
+.SH NAME
+tbridge \- TermuxBridge 命令行 (Termux:API 风格)
+.SH SYNOPSIS
+.B tbridge
+.I command
+.RI [ args ]
+.SH DESCRIPTION
+通过 127.0.0.1:8021 上的 TermuxBridge Android 应用调用系统能力:
+通知、剪贴板、传感器、定位、TTS/STT、截图、模拟触控、UI 树导出。
+.SH ENVIRONMENT
+TBRIDGE_PORT (默认 8021), TBRIDGE_HOST, TBRIDGE_TOKEN, TBRIDGE_TIMEOUT.
+.SH EXAMPLES
+.nf
+tbridge-toast "构建完成"
+tbridge-notification -t 备份 -c "已完成"
+tbridge-screenshot ~/screen.png
+tbridge-sensor -s accelerometer
+.fi
