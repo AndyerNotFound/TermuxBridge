@@ -357,6 +357,17 @@ open(sys.argv[1],"w").write(json.dumps(d,ensure_ascii=False))
 PYEOF
       send "$(cat "$tmp/tb_ov.json")" | okcheck | out '.id'
       ;;
+    update)
+      local tmp="${TMPDIR:-$PREFIX/tmp}"; mkdir -p "$tmp"
+      if [ -z "${1:-}" ] || [ "$1" = "-" ]; then cat > "$tmp/tb_ov2.json"; else cp "$1" "$tmp/tb_ov2.json"; fi
+      python3 - "$tmp/tb_ov2.json" <<'PYEOF'
+import json,sys
+d=json.load(open(sys.argv[1])); d["cmd"]="overlay.update"
+open(sys.argv[1],"w").write(json.dumps(d,ensure_ascii=False))
+PYEOF
+      send "$(cat "$tmp/tb_ov2.json")" | okcheck
+      ;;
+    tree)   send "$(printf '{%s"cmd":"overlay.tree","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.nodes[]|"\(.depth) \(.cls) id=\(.id) \(.x),\(.y) \(.w)x\(.h)"' ;;
     hide|close) send "$(printf '{%s"cmd":"overlay.hide","id":"%s"}' "$(tok)" "${1:-all}")" | okcheck >/dev/null; printf 'hidden\n' ;;
     events) send "$(printf '{%s"cmd":"overlay.events"}' "$(tok)")" | okcheck | out '.events' ;;
     values) send "$(printf '{%s"cmd":"overlay.values","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.values' ;;
@@ -364,7 +375,7 @@ PYEOF
     bounds) send "$(printf '{%s"cmd":"overlay.bounds"}' "$(tok)")" | okcheck | out '.windows[]|"\(.id) x=\(.x) y=\(.y) w=\(.w) h=\(.h)"' ;;
     perm)   send "$(printf '{%s"cmd":"overlay.perm","request":true}' "$(tok)")" | okcheck | out '.granted' ;;
     demo)   cmd_overlay_show_demo ;;
-    *) die "用法: tbridge-overlay show|hide|events|values|list|bounds|perm|demo" ;;
+    *) die "用法: tbridge-overlay show|update|hide|events|values|list|bounds|tree|perm|demo" ;;
   esac
 }
 

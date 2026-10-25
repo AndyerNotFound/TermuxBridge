@@ -36,6 +36,11 @@ final class CmdsOverlay {
             return onMain(ctx, () -> OverlayManager.show(ctx, p));
         });
 
+        r.put("overlay.update", (ctx, p) -> {
+            if (!OverlayManager.granted(ctx)) return Dispatcher.err("需要悬浮窗权限");
+            return onMain(ctx, () -> OverlayManager.update(ctx, p));
+        });
+
         r.put("overlay.hide", (ctx, p) -> {
             final String id = p.optString("id", "");
             return onMain(ctx, () -> {
@@ -54,6 +59,9 @@ final class CmdsOverlay {
 
         r.put("overlay.bounds", (ctx, p) ->
                 onMain(ctx, () -> Dispatcher.okPut("windows", OverlayManager.bounds())));
+
+        r.put("overlay.tree", (ctx, p) ->
+                onMain(ctx, () -> Dispatcher.okPut("nodes", OverlayManager.tree(p.optString("id", "")))));
 
         r.put("overlay.perm", (ctx, p) -> {
             boolean ok = OverlayManager.granted(ctx);

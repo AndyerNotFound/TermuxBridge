@@ -148,9 +148,11 @@ cat build/TermuxBridge.apk | ~/Shizuku/rish -c "pm install -r -S $(stat -c%s bui
 
 ```bash
 tbridge-overlay show card.json     # 或 tbridge-overlay demo 看示例
+tbridge-overlay update card.json   # 原地更新(不重建窗口)
 tbridge-overlay bounds             # 查窗口真实屏幕坐标
 tbridge-overlay events             # 取点击事件(取走即清空)
 tbridge-overlay values <id>        # 读输入框内容
+tbridge-overlay tree demo          # 视图树快照(调试坐标/尺寸)
 tbridge-overlay hide [id|all]
 ```
 
@@ -253,9 +255,25 @@ tbridge-widget pin       # 请求固定到桌面(需桌面支持, 实测返回 t
 | 双击 | `{"type":"gesture","gesture":"double"}` |
 | 三击 | `{"type":"gesture","gesture":"triple"}` |
 | 长按 500ms | `{"type":"gesture","gesture":"long"}` |
-| 滑动 | `{"type":"gesture","gesture":"swipe:left|right|up|down"}` |
+| 拖动 | `drag:start` → `drag:move`(约 40ms 一条) → `drag:end`，带 `dx/dy/ms` |
+| 快速划动 | `{"type":"gesture","gesture":"swipe:left|right|up|down"}` |
 
-单击延迟 280ms 发出（用于区分双击）。
+单击延迟 280ms 发出（用于区分双击）。移动超过 20dp 判为拖动，
+释放时若 <250ms 且位移 >56dp 才算划动，否则是 `drag:end`。
+
+窗口拖移：`{"id":"x","drag_window":true,...}`，按住窗口空白处即可拖动整个窗口。
+
+### 原地更新
+
+`overlay.update` 对同 id 窗口做视图树 diff：文本/颜色/进度/内边距/子节点增删就地改，
+不 remove/add 窗口（不闪、不夺焦）。结构不兼容时才整树重建，响应里 `in_place` 标明走了哪条路。
+
+实测（同一张 3 节点卡片，连续 5 次刷新）：
+
+| 路径 | 设备侧耗时 |
+|---|---|
+| 重建 `show` | 29 / 12 / 20 / 19 ms |
+| 原地 `update` | 4 / 1 / 1 / 0 ms |
 
 ## 电池优化豁免
 
