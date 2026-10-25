@@ -108,6 +108,11 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
     tbridge-app list [关键词]|launch PKG [URI]|info PKG|settings [PKG]
     tbridge-widget update|pin|info
 
+  输入/内容
+    tbridge-ime status|commit TEXT|show|hide|pick
+    tbridge-media [image|video] [N]
+    tbridge-role list|request dialer|sms|home
+
   语音
     tbridge-record SECONDS [FILE]
     tbridge-stt [语言]
@@ -175,6 +180,31 @@ cmd_clipboard_set() {
   sleep 0.8
   send "$(printf '{%s"cmd":"clip.write","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
   printf 'ok\n'
+}
+
+cmd_ime() {
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    status) send "$(printf '{%s"cmd":"ime.status"}' "$(tok)")" | okcheck | out . ;;
+    commit) send "$(printf '{%s"cmd":"ime.commit","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck | out '.committed' ;;
+    show|hide) send "$(printf '{%s"cmd":"ime.%s"}' "$(tok)" "$sub")" | okcheck >/dev/null; printf 'ok\n' ;;
+    pick)   send "$(printf '{%s"cmd":"ime.pick"}' "$(tok)")" | okcheck >/dev/null; printf 'ok\n' ;;
+    *) die "用法: tbridge-ime status|commit TEXT|show|hide|pick" ;;
+  esac
+}
+
+cmd_media() {
+  local kind="${1:-image}"; local n="${2:-10}"
+  send "$(printf '{%s"cmd":"media.list","kind":"%s","limit":%s}' "$(tok)" "$kind" "$n")" | okcheck | out '.items[]|"\(.name) \(.w)x\(.h) \(.size)B\n  \(.path // .uri)"'
+}
+
+cmd_role() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list) send "$(printf '{%s"cmd":"role.list"}' "$(tok)")" | okcheck | out '.roles[]|"\(.key)\t available=\(.available) held=\(.held)"' ;;
+    request) send "$(printf '{%s"cmd":"role.request","role":"%s"}' "$(tok)" "${1:-}")" | okcheck | out . ;;
+    *) die "用法: tbridge-role list|request dialer|sms|home|browser|assistant" ;;
+  esac
 }
 
 cmd_notif() {
@@ -491,6 +521,9 @@ case "$sub" in
   overlay) cmd_overlay "$@" ;;
   power) cmd_power "$@" ;;
   notif) cmd_notif "$@" ;;
+  ime) cmd_ime "$@" ;;
+  media) cmd_media "$@" ;;
+  role) cmd_role "$@" ;;
   theme) cmd_theme "$@" ;;
   app) cmd_app "$@" ;;
   widget) cmd_widget "$@" ;;

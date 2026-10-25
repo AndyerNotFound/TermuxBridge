@@ -122,6 +122,12 @@ public class MainActivity extends Activity {
         });
         root.addView(batBtn);
 
+        // 输入法测试
+        final EditText imeTest = new EditText(this);
+        imeTest.setHint("输入法测试框（点这里，再用 tbridge-ime commit 注入）");
+        imeTest.setSingleLine(true);
+        root.addView(imeTest);
+
         // 服务控制
         Button startBtn = new Button(this);
         startBtn.setText("启动服务");

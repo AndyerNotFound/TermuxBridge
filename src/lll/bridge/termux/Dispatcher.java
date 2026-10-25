@@ -25,6 +25,9 @@ public final class Dispatcher {
         CmdsListen.register(REG);
         CmdsApps.register(REG);
         CmdsWidget.register(REG);
+        CmdsIme.register(REG);
+        CmdsGallery.register(REG);
+        CmdsRole.register(REG);
         CmdsSensors.register(REG);
         CmdsVoice.register(REG);
         CmdsMedia.register(REG);

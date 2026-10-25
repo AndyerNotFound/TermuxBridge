@@ -275,6 +275,61 @@ tbridge-widget pin       # 请求固定到桌面(需桌面支持, 实测返回 t
 | 重建 `show` | 29 / 12 / 20 / 19 ms |
 | 原地 `update` | 4 / 1 / 1 / 0 ms |
 
+
+## 应用图标
+
+`res/mipmap-*/ic_launcher.png`（mdpi 48 → xxxhdpi 192），由 `Pictures/bili/1791346087705.png`
+居中裁方生成。APK 因此从 62 KB 增到 225 KB，图标占绝大部分。
+
+## 输入法（Termux 输入法）
+
+`BridgeImeService` 是一个最小可用 IME：自带 qwerty/数字键盘，同时接受 Termux 注入文本。
+
+```bash
+rish -c "ime enable lll.bridge.termux/.BridgeImeService"
+rish -c "ime set lll.bridge.termux/.BridgeImeService"
+
+tbridge-ime status              # {enabled, selected, connected}
+tbridge-ime commit "文本"        # 注入到当前焦点输入框
+tbridge-ime show|hide|pick
+```
+
+`ime.commit` 需要：已选中本输入法 + 目标输入框有焦点。实测注入 17 字符后，
+目标 EditText 内容为 `hello from termux`。测试完记得切回原输入法。
+
+targetSdk 36 读不到 `Settings.Secure.enabled_input_methods`（仅 ≤33 可读），
+状态改用 `InputMethodManager.getEnabledInputMethodList()` + 服务实例判断。
+
+## 相册 / 视频
+
+```bash
+tbridge-media image 5     # 最近 5 张图
+tbridge-media video 3
+```
+
+返回 `id/name/size/date/w/h/path/uri`，按时间倒序。需要：
+`pm grant lll.bridge.termux android.permission.READ_MEDIA_IMAGES`（视频同理）。
+
+## 系统角色
+
+```bash
+tbridge-role list                     # dialer/sms/home/browser/assistant 是否可用/已持有
+tbridge-role request browser          # 拉起前台页面并发起角色请求
+```
+
+**注意**：`RoleManager.createRequestRoleIntent` 只对有资格的 App 生效——
+浏览器需处理 `VIEW http/https`，电话需 `DIAL`，短信需 `SMS_DELIVER`。
+本应用没有这些 intent filter，调用会返回 `requested:true` 但系统不弹框。
+要真正成为默认应用，等于要实现一个浏览器/拨号器/短信应用，不是桥接层该干的事。
+
+## 未实现（能力边界）
+
+| 需求 | 结论 |
+|---|---|
+| TTS **引擎**提供者 | 需要一个真正的合成器（eSpeak/Pico 或云端），纯 Java 无法凭空合成语音。现有的 `tbridge-tts-speak` 是**调用方**，不是引擎。 |
+| 安装器提供者 | `rish` 已有 `pm install`，重复造轮子无收益。 |
+| 银行卡（NFC/HCE 卡模拟） | 不做。HCE 需要卡组织认证的 AID 与密钥体系，私自模拟银行卡属于欺诈通道；且涉及支付合规。只做 NFC **标签读取**是可行的，需要额外硬件会话。 |
+
 ## 电池优化豁免
 
 Android 的 Doze 会在息屏后掐断后台网络, 常驻服务可能被冻结。授权后不再受限制：

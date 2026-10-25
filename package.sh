@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION=1.3.0
+VERSION=1.4.0
 PKG=tbridge
 ROOT=build/pkg
 PREFIX_DIR="$ROOT/data/data/com.termux/files/usr"
@@ -16,7 +16,7 @@ install -m 755 pkg/tbridge "$PREFIX_DIR/bin/tbridge"
 for c in toast notification vibrate beep tts-speak clipboard-get clipboard-set \
          battery-status net-status wifi-connectioninfo location sensor \
          features feature torch brightness volume share open dial sms-send \
-         screenshot tap swipe ui overlay power notif theme app widget record stt service ping help; do
+         screenshot tap swipe ui overlay power notif theme app widget ime media role record stt service ping help; do
   ln -sf tbridge "$PREFIX_DIR/bin/tbridge-$c"
 done
 
