@@ -60,6 +60,7 @@ public final class OverlayManager {
             try { e.put("seq", ++SEQ); } catch (Exception ignored) {}
             EVENTS.addLast(e);
             while (EVENTS.size() > 500) EVENTS.removeFirst();
+            EVENTS.notifyAll();          // 唤醒长轮询
         }
     }
 
@@ -71,9 +72,20 @@ public final class OverlayManager {
      * 读取事件。since>0 时只返回该序号之后的事件; 默认不清空(可重复读),
      * clear=true 才丢弃已读部分。避免多个读者(daemon + 人)互相抢事件。
      */
-    static JSONArray read(long since, boolean clear) {
+    static JSONArray read(long since, boolean clear) { return read(since, clear, 0); }
+
+    /** waitMs>0 时长轮询: 没有新事件就挂起等, 省掉 daemon 空转轮询 */
+    static JSONArray read(long since, boolean clear, long waitMs) {
         JSONArray a = new JSONArray();
         synchronized (EVENTS) {
+            if (waitMs > 0) {
+                long deadline = android.os.SystemClock.uptimeMillis() + waitMs;
+                while (SEQ <= since) {
+                    long left = deadline - android.os.SystemClock.uptimeMillis();
+                    if (left <= 0) break;
+                    try { EVENTS.wait(left); } catch (InterruptedException ie) { break; }
+                }
+            }
             long last = 0;
             for (JSONObject o : EVENTS) {
                 long sq = o.optLong("seq", 0);

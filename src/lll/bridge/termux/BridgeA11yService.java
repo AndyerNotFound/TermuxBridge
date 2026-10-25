@@ -1,6 +1,7 @@
 package lll.bridge.termux;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
 import android.graphics.Bitmap;
 import android.graphics.Path;
@@ -31,9 +32,49 @@ import java.util.concurrent.TimeUnit;
 public class BridgeA11yService extends AccessibilityService {
     private static volatile BridgeA11yService INSTANCE;
 
-    @Override public void onServiceConnected() { INSTANCE = this; }
+    /** 事件订阅模式: 默认只收窗口切换, 不订阅内容变化(否则任何界面刷新都会唤醒进程) */
+    public static final int M_NONE = 0, M_WINDOW = 1, M_CONTENT = 2, M_BOTH = 3;
+    private static volatile int MODE = M_WINDOW;
 
-    @Override public void onAccessibilityEvent(AccessibilityEvent event) { /* 仅按需拉取, 不常驻监听 */ }
+    public static final java.util.concurrent.atomic.AtomicLong EV_WIN =
+            new java.util.concurrent.atomic.AtomicLong();
+    public static final java.util.concurrent.atomic.AtomicLong EV_CONTENT =
+            new java.util.concurrent.atomic.AtomicLong();
+    public static final java.util.concurrent.atomic.AtomicLong EV_OTHER =
+            new java.util.concurrent.atomic.AtomicLong();
+    public static volatile long EV_T0 = android.os.SystemClock.uptimeMillis();
+
+    @Override public void onServiceConnected() {
+        INSTANCE = this;
+        applyMode(MODE);
+    }
+
+    static int mode() { return MODE; }
+
+    static void applyMode(int mode) {
+        MODE = mode;
+        BridgeA11yService s = INSTANCE;
+        if (s == null) return;
+        try {
+            AccessibilityServiceInfo info = s.getServiceInfo();
+            if (info == null) return;
+            int t = 0;
+            if ((mode & M_WINDOW) != 0) t |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
+            if ((mode & M_CONTENT) != 0) t |= AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
+            info.eventTypes = t;
+            info.notificationTimeout = 100;
+            info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            s.setServiceInfo(info);
+        } catch (Throwable ignored) {}
+    }
+
+    @Override public void onAccessibilityEvent(AccessibilityEvent event) {
+        switch (event.getEventType()) {
+            case AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED: EV_WIN.incrementAndGet(); break;
+            case AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED: EV_CONTENT.incrementAndGet(); break;
+            default: EV_OTHER.incrementAndGet(); break;
+        }
+    }
 
     @Override public void onInterrupt() {}
 

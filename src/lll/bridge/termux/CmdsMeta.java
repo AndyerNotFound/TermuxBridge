@@ -15,6 +15,12 @@ final class CmdsMeta {
         } catch (Exception e) { return "?"; }
     }
 
+    private static String modeName(int m) {
+        return m == BridgeA11yService.M_NONE ? "none"
+                : m == BridgeA11yService.M_BOTH ? "both"
+                : m == BridgeA11yService.M_CONTENT ? "content" : "window";
+    }
+
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("ping", (ctx, p) -> Dispatcher.ok()
                 .put("version", versionName(ctx))
@@ -25,6 +31,32 @@ final class CmdsMeta {
             JSONObject o = Dispatcher.ok();
             for (String f : Prefs.FEATURES) o.put(f, Prefs.enabled(ctx, f));
             return o;
+        });
+
+        r.put("acc.events", (ctx, p) -> {
+            String m2 = p.optString("mode", "");
+            if (!m2.isEmpty()) {
+                int mode = "none".equals(m2) ? BridgeA11yService.M_NONE
+                        : "content".equals(m2) ? BridgeA11yService.M_CONTENT
+                        : "both".equals(m2) ? BridgeA11yService.M_BOTH
+                        : BridgeA11yService.M_WINDOW;
+                BridgeA11yService.applyMode(mode);
+            }
+            return Dispatcher.ok()
+                    .put("mode", modeName(BridgeA11yService.mode()))
+                    .put("enabled", BridgeA11yService.ready());
+        });
+
+        r.put("acc.stats", (ctx, p) -> {
+            long ms = android.os.SystemClock.uptimeMillis() - BridgeA11yService.EV_T0;
+            return Dispatcher.ok()
+                    .put("mode", modeName(BridgeA11yService.mode()))
+                    .put("uptime_ms", ms)
+                    .put("window", BridgeA11yService.EV_WIN.get())
+                    .put("content", BridgeA11yService.EV_CONTENT.get())
+                    .put("other", BridgeA11yService.EV_OTHER.get())
+                    .put("window_per_min", ms > 0 ? Math.round(BridgeA11yService.EV_WIN.get() * 60000.0 / ms) : 0)
+                    .put("content_per_min", ms > 0 ? Math.round(BridgeA11yService.EV_CONTENT.get() * 60000.0 / ms) : 0);
         });
 
         r.put("feature", (ctx, p) -> {

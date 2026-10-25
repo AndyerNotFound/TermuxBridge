@@ -341,6 +341,44 @@ tbridge overlay stats
 即稳定 60 帧——这是窗口重定位路径的天花板，不是代码问题。
 `"hz":120`（`preferredRefreshRate`）实测无效，系统仍按 60 交付触摸。
 
+## 后台资源占用（v1.6.1 实测与优化）
+
+先摆数据，别按 RSS 判断：
+
+| 指标 | 实测值 |
+|---|---|
+| PSS（真实占用） | **18.5 MB**（Java 堆 5.5 MB） |
+| RSS | 108 MB，大头是 `.art` / `.oat` 共享页，不是私有内存 |
+| 空闲 CPU | 0.0%（累计 0.24 s） |
+| 线程 | 16 |
+
+优化前真正浪费的是**唤醒次数**：无障碍订阅了 `typeWindowContentChanged`，而回调是空实现。
+
+实测（20 次滚动）：
+
+| 订阅模式 | window 事件 | content 事件 |
+|---|---|---|
+| 旧（both） | 1 | **1036** |
+| 现在（window） | 8 | **0** |
+
+### 运行时切换订阅
+
+```bash
+tbridge acc.events          # 看当前模式
+tbridge acc.events window   # 默认: 只收窗口切换, 不订阅内容变化
+tbridge acc.events both     # 需要内容变化时(比如自建 UI 监控)临时打开
+tbridge acc.stats           # 事件计数与每分钟速率
+```
+
+### 事件长轮询（省掉 daemon 空转）
+
+```bash
+tbridge overlay events --since 42 --wait 20
+```
+
+没有新事件就挂起等，最多 20 秒（上限 25 s），有新事件立即返回。daemon 用它替代
+`setInterval` 轮询，空闲时进程完全睡眠。实测：无事件等满 2.00 s，3.4 s 处点击 4.16 s 返回。
+
 ## 触摸归属（v1.5.1 修正）
 
 三条规则：
