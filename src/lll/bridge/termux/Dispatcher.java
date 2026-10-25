@@ -18,6 +18,7 @@ public final class Dispatcher {
     static {
         CmdsMeta.register(REG);
         CmdsOverlay.register(REG);
+        CmdsPower.register(REG);
         CmdsCore.register(REG);
         CmdsSensors.register(REG);
         CmdsVoice.register(REG);

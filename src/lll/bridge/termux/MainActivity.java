@@ -109,6 +109,19 @@ public class MainActivity extends Activity {
         });
         root.addView(ovBtn);
 
+        Button batBtn = new Button(this);
+        batBtn.setText("忽略电池优化");
+        batBtn.setOnClickListener(v -> {
+            try {
+                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (Exception e) {
+                Toast.makeText(this, "系统不支持该入口", Toast.LENGTH_SHORT).show();
+            }
+        });
+        root.addView(batBtn);
+
         // 服务控制
         Button startBtn = new Button(this);
         startBtn.setText("启动服务");

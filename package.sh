@@ -16,7 +16,7 @@ install -m 755 pkg/tbridge "$PREFIX_DIR/bin/tbridge"
 for c in toast notification vibrate beep tts-speak clipboard-get clipboard-set \
          battery-status net-status wifi-connectioninfo location sensor \
          features feature torch brightness volume share open dial sms-send \
-         screenshot tap swipe ui overlay record stt service ping help; do
+         screenshot tap swipe ui overlay power record stt service ping help; do
   ln -sf tbridge "$PREFIX_DIR/bin/tbridge-$c"
 done
 

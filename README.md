@@ -173,6 +173,25 @@ tbridge-overlay hide [id|all]
 注意：含 `divider`/`spacer` 的卡片若未指定 `w`，窗口宽度默认取 300dp，
 避免这类无固有宽度的节点把 `WRAP_CONTENT` 容器撑满屏幕。
 
+
+## 电池优化豁免
+
+Android 的 Doze 会在息屏后掐断后台网络, 常驻服务可能被冻结。授权后不再受限制：
+
+```bash
+tbridge-power status      # {ignoring, save_mode, interactive, doze_idle}
+tbridge-power request     # 弹系统授权框, 点「Allow」
+tbridge-power settings    # 打开系统电池优化列表
+```
+
+也可以用 Shizuku 免弹窗:
+
+```bash
+rish -c "cmd deviceidle whitelist +lll.bridge.termux"
+```
+
+对应权限 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`（仅系统对话框使用，不上架应用商店所以无 Play 政策问题）。
+
 ## 安全
 
 - 只监听 `127.0.0.1`,不暴露到局域网

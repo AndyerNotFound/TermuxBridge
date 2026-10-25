@@ -97,6 +97,10 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
     tbridge-tap X Y
     tbridge-swipe X1 Y1 X2 Y2 [MS]
     tbridge-ui [DEPTH]
+    tbridge-overlay show|demo|hide|events|values|list|bounds|perm
+
+  电源
+    tbridge-power status|request|settings
 
   语音
     tbridge-record SECONDS [FILE]
@@ -165,6 +169,16 @@ cmd_clipboard_set() {
   sleep 0.8
   send "$(printf '{%s"cmd":"clip.write","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
   printf 'ok\n'
+}
+
+cmd_power() {
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    status)   send "$(printf '{%s"cmd":"power.status"}' "$(tok)")" | okcheck | out . ;;
+    request)  send "$(printf '{%s"cmd":"power.request"}' "$(tok)")" | okcheck >/dev/null; printf '已弹出授权框(需手动允许)\n' ;;
+    settings) send "$(printf '{%s"cmd":"power.settings","target":"%s"}' "$(tok)" "${1:-}" )" | okcheck >/dev/null; printf 'ok\n' ;;
+    *) die "用法: tbridge-power status|request|settings" ;;
+  esac
 }
 
 cmd_battery_status() { send "$(printf '{%s"cmd":"battery"}' "$(tok)")" | okcheck | out . ; }
@@ -416,6 +430,7 @@ case "$sub" in
   dial) cmd_dial "$@" ;;
   sms-send) cmd_sms_send "$@" ;;
   overlay) cmd_overlay "$@" ;;
+  power) cmd_power "$@" ;;
   screenshot) cmd_screenshot "$@" ;;
   tap) cmd_tap "$@" ;;
   swipe) cmd_swipe "$@" ;;
