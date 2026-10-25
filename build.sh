@@ -15,11 +15,11 @@ KS_PASS="${TBRIDGE_KS_PASS:-android}"
 rm -rf build/classes build/apk build/gen
 mkdir -p build/classes build/apk build/gen
 
-javac -cp "$AJ" -d build/classes src/lll/bridge/termux/*.java
-( cd build/classes && jar cf ../classes.jar lll )
 "$AAPT2" compile --dir res -o build/res.zip
 "$AAPT2" link -o build/apk/base.apk -I "$AJ" \
   --manifest AndroidManifest.xml --java build/gen build/res.zip
+javac -cp "$AJ" -d build/classes $(find src build/gen -name '*.java')
+( cd build/classes && jar cf ../classes.jar lll )
 d8 --release --min-api 28 --lib "$AJ" --output build/apk build/classes.jar
 
 cp build/apk/base.apk build/unsigned.apk

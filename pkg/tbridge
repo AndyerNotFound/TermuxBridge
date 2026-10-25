@@ -102,6 +102,12 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
   电源
     tbridge-power status|request|settings
 
+  通知/外观/应用
+    tbridge-notif status|recent [N]|clear|perm|dismiss KEY
+    tbridge-theme colors|blur
+    tbridge-app list [关键词]|launch PKG [URI]|info PKG|settings [PKG]
+    tbridge-widget update|pin|info
+
   语音
     tbridge-record SECONDS [FILE]
     tbridge-stt [语言]
@@ -169,6 +175,48 @@ cmd_clipboard_set() {
   sleep 0.8
   send "$(printf '{%s"cmd":"clip.write","text":%s}' "$(tok)" "$(jstr "$text")")" | okcheck >/dev/null
   printf 'ok\n'
+}
+
+cmd_notif() {
+  local sub="${1:-status}"; shift || true
+  case "$sub" in
+    status) send "$(printf '{%s"cmd":"notif.status"}' "$(tok)")" | okcheck | out . ;;
+    recent) send "$(printf '{%s"cmd":"notif.recent","limit":%s}' "$(tok)" "${1:-10}")" | okcheck | out '.notifications[]|"\(.pkg) | \(.title) | \(.text)"' ;;
+    clear)  send "$(printf '{%s"cmd":"notif.clear"}' "$(tok)")" | okcheck >/dev/null; printf 'cleared\n' ;;
+    perm)   send "$(printf '{%s"cmd":"notif.perm"}' "$(tok)")" | okcheck >/dev/null; printf 'ok\n' ;;
+    dismiss) send "$(printf '{%s"cmd":"notif.dismiss","key":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null; printf 'ok\n' ;;
+    *) die "用法: tbridge-notif status|recent [N]|clear|perm|dismiss KEY" ;;
+  esac
+}
+
+cmd_theme() {
+  local sub="${1:-colors}"; shift || true
+  case "$sub" in
+    colors) send "$(printf '{%s"cmd":"theme.colors"}' "$(tok)")" | okcheck | out .colors ;;
+    blur)   send "$(printf '{%s"cmd":"theme.blur"}' "$(tok)")" | okcheck | out . ;;
+    *) die "用法: tbridge-theme colors|blur" ;;
+  esac
+}
+
+cmd_app() {
+  local sub="${1:-list}"; shift || true
+  case "$sub" in
+    list)   send "$(printf '{%s"cmd":"app.list","query":%s}' "$(tok)" "$(jstr "${1:-}")")" | okcheck | out '.apps[]|"\(.label)\t\(.pkg)"' ;;
+    launch) send "$(printf '{%s"cmd":"app.launch","pkg":%s,"uri":%s}' "$(tok)" "$(jstr "$1")" "$(jstr "${2:-}")")" | okcheck | out '.pkg' ;;
+    info)   send "$(printf '{%s"cmd":"app.info","pkg":%s}' "$(tok)" "$(jstr "$1")")" | okcheck | out .app ;;
+    settings) send "$(printf '{%s"cmd":"app.settings","pkg":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null; printf 'ok\n' ;;
+    *) die "用法: tbridge-app list [关键词]|launch PKG [URI]|info PKG|settings [PKG]" ;;
+  esac
+}
+
+cmd_widget() {
+  local sub="${1:-info}"; shift || true
+  case "$sub" in
+    update) send "$(printf '{%s"cmd":"widget.update"}' "$(tok)")" | okcheck | out .instances ;;
+    pin)    send "$(printf '{%s"cmd":"widget.pin"}' "$(tok)")" | okcheck | out .requested ;;
+    info)   send "$(printf '{%s"cmd":"widget.info"}' "$(tok)")" | okcheck | out . ;;
+    *) die "用法: tbridge-widget update|pin|info" ;;
+  esac
 }
 
 cmd_power() {
@@ -431,6 +479,10 @@ case "$sub" in
   sms-send) cmd_sms_send "$@" ;;
   overlay) cmd_overlay "$@" ;;
   power) cmd_power "$@" ;;
+  notif) cmd_notif "$@" ;;
+  theme) cmd_theme "$@" ;;
+  app) cmd_app "$@" ;;
+  widget) cmd_widget "$@" ;;
   screenshot) cmd_screenshot "$@" ;;
   tap) cmd_tap "$@" ;;
   swipe) cmd_swipe "$@" ;;

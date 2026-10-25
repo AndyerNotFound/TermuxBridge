@@ -20,6 +20,11 @@ public final class Dispatcher {
         CmdsOverlay.register(REG);
         CmdsPower.register(REG);
         CmdsCore.register(REG);
+        CmdsNotify.register(REG);
+        CmdsTheme.register(REG);
+        CmdsListen.register(REG);
+        CmdsApps.register(REG);
+        CmdsWidget.register(REG);
         CmdsSensors.register(REG);
         CmdsVoice.register(REG);
         CmdsMedia.register(REG);

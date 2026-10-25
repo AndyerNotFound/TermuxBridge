@@ -34,21 +34,6 @@ final class CmdsCore {
             return Dispatcher.ok();
         });
 
-        r.put("notify", (ctx, p) -> {
-            String text = p.optString("text", "");
-            if (text.isEmpty()) return Dispatcher.err("missing text");
-            String ch = p.optString("channel", "bridge");
-            NotificationManager nm = ctx.getSystemService(NotificationManager.class);
-            nm.createNotificationChannel(new NotificationChannel(ch, "Bridge:" + ch,
-                    NotificationManager.IMPORTANCE_DEFAULT));
-            Notification n = new Notification.Builder(ctx, ch)
-                    .setSmallIcon(android.R.drawable.stat_notify_chat)
-                    .setContentTitle(p.optString("title", "TermuxBridge"))
-                    .setContentText(text)
-                    .setAutoCancel(true).build();
-            nm.notify(p.optInt("id", (int) System.currentTimeMillis()), n);
-            return Dispatcher.ok();
-        });
 
         r.put("vibrate", (ctx, p) -> {
             Vibrator v = ctx.getSystemService(Vibrator.class);

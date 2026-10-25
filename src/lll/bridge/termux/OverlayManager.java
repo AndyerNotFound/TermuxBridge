@@ -53,7 +53,7 @@ public final class OverlayManager {
         return Math.round((float) (v * c.getResources().getDisplayMetrics().density));
     }
 
-    private static void pushEvent(JSONObject e) {
+    static void pushEvent(JSONObject e) {
         synchronized (EVENTS) {
             EVENTS.addLast(e);
             while (EVENTS.size() > 200) EVENTS.removeFirst();
@@ -92,15 +92,21 @@ public final class OverlayManager {
             lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         }
         if (!req.optBoolean("touch", true)) lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        int blur = req.optInt("blur", 0);
+        if (blur > 0 && Build.VERSION.SDK_INT >= 31) {
+            lp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+            lp.setBlurBehindRadius(dp(ctx, blur));
+        }
         lp.gravity = gravity(req.optString("gravity", "top|start"));
         lp.x = dp(ctx, req.optDouble("x", 0));
         lp.y = dp(ctx, req.optDouble("y", 80));
-        lp.width = req.optInt("w", WindowManager.LayoutParams.WRAP_CONTENT);
+        // x/y/w/h 统一按 dp
+        lp.width = winDim(ctx, req, "w", -2);
         if (lp.width == WindowManager.LayoutParams.WRAP_CONTENT
                 && !req.has("w") && hasFillNode(req.optJSONObject("view"))) {
-            lp.width = dp(ctx, 300);   // 含 divider/spacer 的卡片: 默认 300dp
+            lp.width = dp(ctx, 300);
         }
-        lp.height = req.optInt("h", WindowManager.LayoutParams.WRAP_CONTENT);
+        lp.height = winDim(ctx, req, "h", -2);
 
         entry.root = root;
         entry.lp = lp;
@@ -216,7 +222,7 @@ public final class OverlayManager {
                 b.setText(n.optString("text", "OK"));
                 b.setAllCaps(false);
                 b.setTextColor(n.optString("color", "").isEmpty()
-                        ? Color.WHITE : Color.parseColor(n.optString("color")));
+                        ? Color.WHITE : Util.color(n.optString("color"), Color.WHITE));
                 b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 if (n.optString("bg", "").isEmpty()) {
                     GradientDrawable g = new GradientDrawable();
@@ -227,15 +233,8 @@ public final class OverlayManager {
                 common(b, n, ctx);
                 final String nid = n.optString("id", "");
                 final String label = n.optString("text", "");
-                b.setOnClickListener(v -> {
-                    JSONObject ev = new JSONObject();
-                    try {
-                        ev.put("type", "click").put("window", wid)
-                          .put("id", nid).put("text", label)
-                          .put("ts", System.currentTimeMillis());
-                    } catch (Exception ignored) {}
-                    pushEvent(ev);
-                });
+                b.setOnTouchListener(new GestureController(ctx, wid, nid, label));
+                b.setClickable(true);
                 return b;
             }
             case "input": {
@@ -243,7 +242,7 @@ public final class OverlayManager {
                 et.setHint(n.optString("hint", ""));
                 et.setText(n.optString("text", ""));
                 et.setTextColor(n.optString("color", "").isEmpty()
-                        ? Color.BLACK : Color.parseColor(n.optString("color")));
+                        ? Color.BLACK : Util.color(n.optString("color"), Color.WHITE));
                 et.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
                 et.setInputType(n.optBoolean("multiline", false)
                         ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -268,7 +267,7 @@ public final class OverlayManager {
             case "divider": {
                 View v = new View(ctx);
                 v.setBackgroundColor(n.optString("color", "").isEmpty()
-                        ? 0x33000000 : Color.parseColor(n.optString("color")));
+                        ? 0x33000000 : Util.color(n.optString("color"), Color.WHITE));
                 v.setMinimumHeight(Math.max(1, dp(ctx, n.optDouble("h", 1))));
                 return v;
             }
@@ -282,9 +281,21 @@ public final class OverlayManager {
                 if ("center".equals(align)) tv.setGravity(Gravity.CENTER);
                 else if ("end".equals(align)) tv.setGravity(Gravity.END);
                 common(tv, n, ctx);
+                if (!n.optString("id", "").isEmpty())
+                    tv.setOnTouchListener(new GestureController(ctx, wid,
+                            n.optString("id"), n.optString("text")));
                 return tv;
             }
         }
+    }
+
+    /** 窗口级尺寸: 数字按 dp, 或 wrap/match */
+    private static int winDim(Context ctx, JSONObject req, String key, int def) {
+        if (!req.has(key)) return def;
+        String v = String.valueOf(req.opt(key));
+        if ("wrap".equals(v)) return WindowManager.LayoutParams.WRAP_CONTENT;
+        if ("match".equals(v)) return WindowManager.LayoutParams.MATCH_PARENT;
+        return dp(ctx, req.optDouble(key, 0));
     }
 
     private static int dim(Context ctx, JSONObject n, String key, int def) {
@@ -303,7 +314,7 @@ public final class OverlayManager {
         int radius = dp(ctx, n.optDouble("radius", 0));
         if (!bg.isEmpty() || radius > 0) {
             GradientDrawable g = new GradientDrawable();
-            g.setColor(bg.isEmpty() ? Color.TRANSPARENT : Color.parseColor(bg));
+            g.setColor(bg.isEmpty() ? Color.TRANSPARENT : Util.color(bg, 0xFF000000));
             if (radius > 0) g.setCornerRadius(radius);
             v.setBackground(g);
         }

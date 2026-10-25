@@ -174,6 +174,89 @@ tbridge-overlay hide [id|all]
 避免这类无固有宽度的节点把 `WRAP_CONTENT` 容器撑满屏幕。
 
 
+
+## 通知: 渠道 / 进度 / Live Update / 动作按钮
+
+```json
+{"cmd":"notify","id":9001,"channel":"live","channel_name":"进度",
+ "title":"备份中","text":"6/10","ongoing":true,
+ "progress":{"value":60,"max":100,"live":true,"segments":["FF6750A4"]},
+ "actions":[{"label":"暂停","json":"{\"cmd\":\"toast\",\"text\":\"已暂停\"}"}]}
+```
+
+- `progress.live=true` 在 Android 16 上走 `Notification.ProgressStyle` 并请求提升为
+  Live Update（状态栏胶囊）。需要 appop: `appops set lll.bridge.termux POST_PROMOTED_NOTIFICATIONS allow`，
+  否则 `can_promote` 为 false（系统会照常显示普通通知）。
+- `actions[].json` 是动作按钮要执行的桥命令，点按后由 `BridgeReceiver` 执行。
+
+```bash
+tbridge-notification -t 标题 -c 内容     # 简易通知
+tbridge-notif status|recent [N]|clear|perm|dismiss KEY
+```
+
+渠道管理（渠道属性创建后不可改，只能新建）：
+
+```bash
+tbridge ping  # 或直接调用协议
+# notify.channel {id,name,importance,sound,vibration}
+# notify.channels → 列表
+```
+
+## 通知监听
+
+`BridgeNotifListener` 缓存最近 80 条通知（`notif.recent`），可读标题/正文/进度/动作/包名。
+
+```bash
+rish -c "cmd notification allow_listener lll.bridge.termux/lll.bridge.termux.BridgeNotifListener"
+tbridge-notif status   # connected/access
+tbridge-notif recent 10
+```
+
+## Material You 取色 / 模糊
+
+```bash
+tbridge-theme colors   # system_accent1..3 / neutral1..2 + 壁纸主色
+tbridge-theme blur     # {supported, cross_window_blur_enabled}
+```
+
+悬浮窗模糊：`{"id":"x","blur":30,"view":{...}}` → `FLAG_BLUR_BEHIND` + `blurBehindRadius`
+（实测窗口属性生效，需设备支持跨窗口模糊）。
+
+## 应用启动 / 深链 / 关联启动
+
+```bash
+tbridge-app list [关键词]          # 可启动应用(235 个)
+tbridge-app launch PKG [URI]       # 启动应用, 可带深链
+tbridge-app info PKG               # 版本/UID/targetSdk
+tbridge-app settings [PKG]         # 应用详情页(打开关联启动/自启动开关)
+tbridge-open URL                   # 系统选择器打开链接
+```
+
+ColorOS 的"关联启动/自启动"是 OEM 私有开关，只能跳到应用详情页由用户手动开启；
+被拦截时 `app.launch` 返回 `启动失败(可能被关联启动限制)`。
+
+## 桌面小组件
+
+```bash
+tbridge-widget info      # 已放置实例数
+tbridge-widget update    # 刷新内容(电量/端口/时间)
+tbridge-widget pin       # 请求固定到桌面(需桌面支持, 实测返回 true)
+```
+
+## 悬浮窗手势
+
+带 `id` 的节点（按钮/文本）支持五种触控，事件写入同一队列：
+
+| 手势 | 事件 |
+|---|---|
+| 单击 | `{"type":"click","gesture":"tap"}` |
+| 双击 | `{"type":"gesture","gesture":"double"}` |
+| 三击 | `{"type":"gesture","gesture":"triple"}` |
+| 长按 500ms | `{"type":"gesture","gesture":"long"}` |
+| 滑动 | `{"type":"gesture","gesture":"swipe:left|right|up|down"}` |
+
+单击延迟 280ms 发出（用于区分双击）。
+
 ## 电池优化豁免
 
 Android 的 Doze 会在息屏后掐断后台网络, 常驻服务可能被冻结。授权后不再受限制：

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#E6111827"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/w_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="TermuxBridge"
+        android:textColor="#FF00E676"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/w_body"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="—"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:paddingTop="2dp" />
+
+    <TextView
+        android:id="@+id/w_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="点击刷新"
+        android:textColor="#99FFFFFF"
+        android:textSize="10sp"
+        android:paddingTop="4dp" />
+</LinearLayout>
