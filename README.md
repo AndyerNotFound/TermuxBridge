@@ -158,3 +158,27 @@ src/lll/bridge/termux/
   *Activity.java       透明 Activity(剪贴板焦点/投影授权/语音识别)
   BridgeReceiver.java  广播备用通道
 ```
+
+## 许可证
+
+本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)**。
+
+```
+Copyright (C) 2026 AndyerNotFound
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+```
+
+全文见 [LICENSE](LICENSE)。注意 AGPL 第 13 条:若你将本软件作为网络服务提供,
+必须向使用者提供对应的完整源代码。
