@@ -43,6 +43,7 @@ public final class OverlayManager {
         WindowManager.LayoutParams lp;
         JSONObject layout;
         Map<String, EditText> inputs = new LinkedHashMap<>();
+        Map<View, GestureController> gc = new java.util.IdentityHashMap<>();
         boolean trace;
     }
 
@@ -120,6 +121,7 @@ public final class OverlayManager {
             lp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
             lp.setBlurBehindRadius(dp(ctx, blur));
         }
+        if (req.has("hz")) lp.preferredRefreshRate = (float) req.optDouble("hz", 120);
         lp.gravity = gravity(req.optString("gravity", "top|start"));
         lp.x = dp(ctx, req.optDouble("x", 0));
         lp.y = dp(ctx, req.optDouble("y", 80));
@@ -136,7 +138,11 @@ public final class OverlayManager {
         JSONObject rootNode = req.optJSONObject("view") != null ? req.optJSONObject("view") : req;
         boolean rootOwns = rootNode.optJSONObject("on") != null;
         if (rootOwns) {
-            // 手势已在 build() 里挂到根上; 拖动窗口则交给 GestureController 的 drag 事件
+            // 手势已在 build() 里挂到根上; 拖动窗口由同一个控制器驱动, 不再二选一
+            if (req.optBoolean("drag_window", false)) {
+                GestureController rgc = entry.gc.get(root);
+                if (rgc != null) rgc.setMover(makeMover(ctx, root, lp, wm));
+            }
         } else if (req.optBoolean("drag_window", false)) {
             attachWindowDrag(ctx, root, lp, wm, id, entry.trace);
         } else {
@@ -165,6 +171,7 @@ public final class OverlayManager {
                                          WindowManager.LayoutParams lp, WindowManager wm,
                                          String id, boolean trace) {
         final float[] last = new float[2];
+        final GestureController.Mover[] moverRef = new GestureController.Mover[1];
         root.setOnTouchListener((v, ev) -> {
             logTouch(id, ev, trace);
             switch (ev.getActionMasked()) {
@@ -174,10 +181,9 @@ public final class OverlayManager {
                 case android.view.MotionEvent.ACTION_MOVE: {
                     float dx = ev.getRawX() - last[0], dy = ev.getRawY() - last[1];
                     if (Math.abs(dx) + Math.abs(dy) < 1) return true;
-                    lp.x += (int) dx; lp.y += (int) dy;
-                    clamp(lp, root, wm);
+                    if (moverRef[0] == null) moverRef[0] = makeMover(ctx, root, lp, wm);
+                    moverRef[0].by(dx, dy);
                     last[0] = ev.getRawX(); last[1] = ev.getRawY();
-                    try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
                     return true;
                 }
             }
@@ -326,6 +332,69 @@ public final class OverlayManager {
         return false;
     }
 
+    private static GestureController newGC(Context ctx, String wid, JSONObject n, Entry entry) {
+        GestureController c = new GestureController(ctx, wid, n.optString("id", ""),
+                n.optString("text", ""), n);
+        entry.gc.put(null, c);   // 占位, 真实 View 在 attach 时写入
+        return c;
+    }
+
+    private static void attachGC(View v, GestureController c, Entry entry) {
+        v.setOnTouchListener(c);
+        entry.gc.put(v, c);
+    }
+
+    static final java.util.concurrent.atomic.AtomicLong MOVES =
+            new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong COMMITS =
+            new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong COMMIT_NS =
+            new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong MAX_NS =
+            new java.util.concurrent.atomic.AtomicLong();
+    static volatile long STAT_T0 = android.os.SystemClock.uptimeMillis();
+    static final long[] FRAME_GAPS = new long[128];
+    static int FRAME_IDX = 0;
+    static long LAST_COMMIT_NS = 0;
+
+    /** 拖动窗口: 累积位移, 每帧只提交一次, 屏幕尺寸只取一次(避免 Binder 抖动) */
+    private static GestureController.Mover makeMover(Context ctx, View root,
+                                                     WindowManager.LayoutParams lp, WindowManager wm) {
+        final float[] pend = new float[2];
+        final boolean[] sched = {false};
+        final android.graphics.Rect scr;
+        if (Build.VERSION.SDK_INT >= 30) {
+            scr = wm.getCurrentWindowMetrics().getBounds();
+        } else {
+            android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+            scr = new android.graphics.Rect(0, 0, dm.widthPixels, dm.heightPixels);
+        }
+        final int bottomPad = dp(ctx, 44);
+        return (dx, dy) -> {
+            pend[0] += dx; pend[1] += dy;
+            if (sched[0]) return;
+            sched[0] = true;
+            root.postOnAnimation(() -> {
+                sched[0] = false;
+                int mx = Math.round(pend[0]), my = Math.round(pend[1]);
+                pend[0] -= mx; pend[1] -= my;
+                if (mx == 0 && my == 0) return;
+                lp.x += mx; lp.y += my;
+                int w = root.getWidth(), h = root.getHeight();
+                lp.x = Math.max(0, Math.min(lp.x, Math.max(0, scr.width() - w)));
+                lp.y = Math.max(0, Math.min(lp.y, Math.max(0, scr.height() - h - bottomPad)));
+                long t0 = System.nanoTime();
+                if (LAST_COMMIT_NS != 0) { FRAME_GAPS[FRAME_IDX++ % FRAME_GAPS.length] = t0 - LAST_COMMIT_NS; }
+                LAST_COMMIT_NS = t0;
+                try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+                long dt = System.nanoTime() - t0;
+                COMMITS.incrementAndGet();
+                COMMIT_NS.addAndGet(dt);
+                MAX_NS.accumulateAndGet(dt, Math::max);
+            });
+        };
+    }
+
     // ---------- 视图构建 ----------
     private static View build(Context ctx, JSONObject n, String wid, Entry entry) {
         String type = n.optString("type", "text");
@@ -347,8 +416,7 @@ public final class OverlayManager {
                     }
                 }
                 if (n.optJSONObject("on") != null) {
-                    ll.setOnTouchListener(new GestureController(ctx, wid,
-                            n.optString("id", ""), n.optString("text", "")));
+                    attachGC(ll, newGC(ctx, wid, n, entry), entry);
                     ll.setClickable(true);
                 }
                 return ll;
@@ -369,7 +437,7 @@ public final class OverlayManager {
                 common(b, n, ctx);
                 final String nid = n.optString("id", "");
                 final String label = n.optString("text", "");
-                b.setOnTouchListener(new GestureController(ctx, wid, nid, label));
+                attachGC(b, newGC(ctx, wid, n, entry), entry);
                 b.setClickable(true);
                 return b;
             }
@@ -419,8 +487,7 @@ public final class OverlayManager {
                 common(tv, n, ctx);
                 // 只有声明了 on 的节点才接手势; 否则让触摸冒泡给父容器
                 if (!n.optString("id", "").isEmpty() && n.optJSONObject("on") != null)
-                    tv.setOnTouchListener(new GestureController(ctx, wid,
-                            n.optString("id"), n.optString("text")));
+                    attachGC(tv, newGC(ctx, wid, n, entry), entry);
                 return tv;
             }
         }
@@ -485,8 +552,7 @@ public final class OverlayManager {
                 String label = n.optString("text", "OK");
                 if (!label.contentEquals(b.getText())) {
                     b.setText(label);
-                    b.setOnTouchListener(new GestureController(ctx, wid,
-                            n.optString("id", ""), label));
+                    attachGC(b, newGC(ctx, wid, n, entry), entry);
                 }
                 b.setTextColor(n.optString("color", "").isEmpty()
                         ? Color.WHITE : Util.color(n.optString("color"), Color.WHITE));

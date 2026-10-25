@@ -301,6 +301,46 @@ tbridge-text -g                # 读回来
 走无障碍 `ACTION_SET_TEXT`，因此**Fcitx5 可以保持默认输入法**，不需要切到本应用的 IME。
 实测：Fcitx5 为默认时写入 8 字符并读回成功。找不到目标框时先 `text.debug` 看窗口/可编辑节点数量。
 
+## 手势判定（v1.6.0 重写）
+
+所有阈值按节点配置，不用改代码：
+
+| 参数 | 默认 | 含义 |
+|---|---|---|
+| `tap_ms` | 280 | 多击窗口（双击/三击的间隔上限） |
+| `hold_ms` | 500 | 长按触发时间 |
+| `long_hold` | 关 | 二段长按，超时后再发一个 `long_hold` 事件 |
+| `slop` | 20dp | 超过此位移进入拖动 |
+| `swipe` | 56dp | 滑动判定的最小位移 |
+
+事件（都带 `id` / `window` / `dev`；`dev=-1` 是注入，正数是真实触摸屏）：
+
+```text
+click(tap) / double / triple / long / long_hold
+drag:start / drag:move / drag:end / drag:cancel
+swipe:up|down|left|right
+```
+
+规则：
+
+- **拖动和手势不再二选一**。`drag_window:true` 时窗口跟着手指走，同时照常上报 drag 事件，松手后单击依然有效。
+- 拖动被系统打断（`ACTION_CANCEL`）会补一条 `drag:end`，daemon 不会卡在"拖动态"。
+- 快速滑动会先 `drag:cancel` 再 `swipe:*`，看到 cancel 就当拖动作废。
+
+## 拖动性能
+
+`overlay.stats` 返回实测数据：
+
+```bash
+tbridge overlay stats
+# {"commits":279,"commits_per_s":41,"avg_commit_ms":0.06,"max_commit_ms":0.26,
+#  "frame_gap_p50_ms":16.59,"frame_gap_p95_ms":17.20,"fps_est":60}
+```
+
+结论：`updateViewLayout` 本身只要 **0.06ms**，瓶颈不在重排；拖动期间提交间隔 p50 = 16.6ms，
+即稳定 60 帧——这是窗口重定位路径的天花板，不是代码问题。
+`"hz":120`（`preferredRefreshRate`）实测无效，系统仍按 60 交付触摸。
+
 ## 触摸归属（v1.5.1 修正）
 
 三条规则：

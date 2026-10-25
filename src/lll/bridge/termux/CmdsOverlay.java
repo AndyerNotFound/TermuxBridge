@@ -30,6 +30,15 @@ final class CmdsOverlay {
         return box[0] instanceof JSONObject ? (JSONObject) box[0] : Dispatcher.err("overlay failed");
     }
 
+    private static double pct(int p) {
+        long[] a = new long[128];
+        int n = 0;
+        for (int i = 0; i < 128; i++) if (OverlayManager.FRAME_GAPS[i] > 0) a[n++] = OverlayManager.FRAME_GAPS[i];
+        if (n == 0) return 0;
+        java.util.Arrays.sort(a, 0, n);
+        return a[Math.min(n - 1, n * p / 100)] / 1e6;
+    }
+
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("overlay.show", (ctx, p) -> {
             if (!OverlayManager.granted(ctx)) return Dispatcher.err(
@@ -68,6 +77,22 @@ final class CmdsOverlay {
 
         r.put("overlay.tree", (ctx, p) ->
                 onMain(ctx, () -> Dispatcher.okPut("nodes", OverlayManager.tree(p.optString("id", "")))));
+
+        r.put("overlay.stats", (ctx, p) -> {
+            long ms = android.os.SystemClock.uptimeMillis() - OverlayManager.STAT_T0;
+            long c = OverlayManager.COMMITS.get(), m = OverlayManager.MOVES.get();
+            return Dispatcher.ok()
+                    .put("uptime_ms", ms)
+                    .put("moves", m)
+                    .put("commits", c)
+                    .put("moves_per_s", ms > 0 ? Math.round(m * 1000.0 / ms) : 0)
+                    .put("commits_per_s", ms > 0 ? Math.round(c * 1000.0 / ms) : 0)
+                    .put("avg_commit_ms", c > 0 ? OverlayManager.COMMIT_NS.get() / 1e6 / c : 0)
+                    .put("max_commit_ms", OverlayManager.MAX_NS.get() / 1e6)
+                    .put("frame_gap_p50_ms", pct(50))
+                    .put("frame_gap_p95_ms", pct(95))
+                    .put("fps_est", pct(50) > 0 ? Math.round(1000 / pct(50)) : 0);
+        });
 
         r.put("overlay.perm", (ctx, p) -> {
             boolean ok = OverlayManager.granted(ctx);
