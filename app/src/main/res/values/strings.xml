@@ -70,4 +70,9 @@
 
     <!-- share chooser -->
     <string name="share_default_title">Share</string>
+    <string name="main_btn_shizuku_fix">Grant all permissions via Shizuku</string>
+    <string name="main_shizuku_na">Shizuku not running — install/start Shizuku, or grant manually</string>
+    <string name="main_shizuku_running">Shizuku: connected</string>
+    <string name="main_btn_panic">PANIC — stop everything</string>
+    <string name="main_toast_panic">All bridges stopped. Start the service to recover.</string>
 </resources>

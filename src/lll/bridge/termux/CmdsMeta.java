@@ -27,6 +27,18 @@ final class CmdsMeta {
                 .put("sdk", android.os.Build.VERSION.SDK_INT)
                 .put("port", Prefs.port(ctx)));
 
+        r.put("panic.stop", (ctx, p) -> {
+            Panic.stopAll(ctx);
+            return Dispatcher.ok().put("stopped", true)
+                    .put("note", "all channels cut; start the service to recover");
+        });
+
+        r.put("panic.status", (ctx, p) -> Dispatcher.ok()
+                .put("panicked", Prefs.panicked(ctx))
+                .put("a11y", BridgeA11yService.ready())
+                .put("notif", BridgeNotifListener.INSTANCE != null)
+                .put("service_up", true));
+
         r.put("features", (ctx, p) -> {
             JSONObject o = Dispatcher.ok();
             for (String f : Prefs.FEATURES) o.put(f, Prefs.enabled(ctx, f));

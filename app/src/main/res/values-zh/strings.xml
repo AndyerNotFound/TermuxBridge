@@ -70,4 +70,9 @@
 
     <!-- share chooser -->
     <string name="share_default_title">分享</string>
+    <string name="main_btn_shizuku_fix">通过 Shizuku 一键授权</string>
+    <string name="main_shizuku_na">Shizuku 未运行 — 请安装/启动 Shizuku，或手动授权</string>
+    <string name="main_shizuku_running">Shizuku：已连接</string>
+    <string name="main_btn_panic">紧急停止 — 切断全部</string>
+    <string name="main_toast_panic">已切断全部通道。重新启动服务以恢复。</string>
 </resources>

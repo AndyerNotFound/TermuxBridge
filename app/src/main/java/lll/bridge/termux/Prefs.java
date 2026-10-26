@@ -16,6 +16,14 @@ public final class Prefs {
         return c.getSharedPreferences("bridge", Context.MODE_PRIVATE);
     }
 
+    /** panic state: set by panic.stop, cleared by explicit ACTION_START */
+    public static boolean panicked(Context c) {
+        return sp(c).getBoolean("panicked", false);
+    }
+    public static void setPanicked(Context c, boolean v) {
+        sp(c).edit().putBoolean("panicked", v).apply();
+    }
+
     public static boolean enabled(Context c, String f) {
         return sp(c).getBoolean("feat." + f, true);
     }

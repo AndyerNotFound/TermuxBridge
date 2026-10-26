@@ -26,6 +26,34 @@ text-input editor flow in detail.
 with `since` events are retained (re-readable). `wait` long-polls up to 25 s.
 The buffer holds the last 500 events; `seq` is monotonic per service lifetime.
 
+## Panic brake
+
+| Command | Params | Response |
+|---|---|---|
+| `panic.stop` | — | cuts everything at once: overlay windows removed, a11y `disableSelf()` (system clears enabled_accessibility_services), notif listener unbound, TCP accept-loop gated, foreground service stopped, START_STICKY broken, boot auto-start suppressed |
+| `panic.status` | — | `panicked`, `a11y`, `notif`, `service_up` |
+
+While panicked the TCP accept-loop still accepts one connection per request and
+answers `{"ok":false,"error":"panicked - restart service to recover"}`-style
+status replies; the broadcast channel refuses everything. Recovery: `am start-
+foreground-service -n lll.bridge.termux/.BridgeService -a lll.bridge.START`
+(clears the flag) or the MainActivity PANIC-adjacent start button.
+
+## Node styling (MD3)
+
+| Node | New params | Values / notes |
+|---|---|---|
+| `button` | `style` | `filled` (default) / `tonal` / `elevated` / `outlined` / `text` — real Material 3 button styles; changing `style` via `overlay.update` rebuilds the view |
+| `input`, `textinput` | `style` | `outlined` (default) / `filled` — MD3 text field box styles |
+| `switch` | — | now a true MD3 `MaterialSwitch` |
+| `slider` | `label` | `float` (default) / `none` / `inside` — value label behavior |
+| `col`, `row`, `text`, `card`, `chip` | — | declaring `on` now adds an MD3 state-layer ripple (12% primary) |
+
+Inline text editing (input/textinput, default unless `mode:"dialog"`): tapping
+the field transiently makes the overlay window focusable, shows the IME; DONE,
+BACK on the field, or a tap outside the window (events still pass through to
+apps below) re-seals it NOT_FOCUSABLE and emits `change {window,id,value}`.
+
 ## Event stream
 
 All events carry `seq`. Gesture/input events carry `window` (overlay id) and

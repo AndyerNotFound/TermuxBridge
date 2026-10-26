@@ -65,6 +65,7 @@ public class BridgeService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String a = intent != null ? intent.getAction() : null;
+        if (ACTION_START.equals(a)) Prefs.setPanicked(this, false);   // explicit start lifts the brake
         if (ACTION_STOP.equals(a)) {
             stopSelf();
             return START_NOT_STICKY;
@@ -103,6 +104,10 @@ public class BridgeService extends Service {
                 server.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
                 boundPort = port;
                 while (true) {
+                    if (Prefs.panicked(BridgeService.this)) {   // brake: no new connections
+                        try { Thread.sleep(500); } catch (InterruptedException ie) { break; }
+                        continue;
+                    }
                     Socket s = server.accept();
                     new Handler(s).start();
                 }

@@ -7,7 +7,7 @@ import android.content.Intent;
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context ctx, Intent intent) {
-        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction()) && !Prefs.panicked(ctx)) {
             try {
                 ctx.startForegroundService(new Intent(ctx, BridgeService.class)
                         .setAction(BridgeService.ACTION_START));

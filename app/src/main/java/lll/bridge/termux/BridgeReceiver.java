@@ -12,6 +12,8 @@ public class BridgeReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
+        // panic brake: the whole channel is cut until the service restarts
+        if (Prefs.panicked(ctx)) { android.util.Log.i("TBridge", "RESP {\"ok\":false,\"error\":\"panicked - restart service to recover\"}"); return; }
         if (ACTION_RUN.equals(intent.getAction())) {
             String j = intent.getStringExtra("json");
             if (j != null) android.util.Log.i("TBridge", "ACTION " + j + " -> " + Dispatcher.dispatch(ctx, j, false));

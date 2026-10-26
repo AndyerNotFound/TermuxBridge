@@ -29,3 +29,4 @@ reference/
 .bak-v184/
 .tools/
 *.bak-pre-rime
+*.bak-*

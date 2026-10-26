@@ -104,6 +104,31 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         permBtn.setOnClickListener(v -> requestPerms());
         root.addView(permBtn);
 
+        // one-shot Shizuku grant: everything the shell uid can hand out
+        MaterialButton shizukuBtn = new MaterialButton(this);
+        shizukuBtn.setText(getString(R.string.main_btn_shizuku_fix));
+        shizukuBtn.setOnClickListener(v -> {
+            if (!ShizukuPerms.available()) {
+                toast(getString(R.string.main_shizuku_na));
+                return;
+            }
+            toast(getString(R.string.main_shizuku_running));
+            ShizukuPerms.fixAsync(this, summary ->
+                    runOnUiThread(() -> toast(summary.trim())));
+        });
+        root.addView(shizukuBtn);
+
+        // panic brake: one tap kills every active channel
+        MaterialButton panicBtn = new MaterialButton(this);
+        panicBtn.setText(getString(R.string.main_btn_panic));
+        panicBtn.setBackgroundColor(0xFFB3261E);
+        panicBtn.setTextColor(0xFFFFFFFF);
+        panicBtn.setOnClickListener(v -> {
+            Panic.stopAll(this);
+            toast(getString(R.string.main_toast_panic));
+        });
+        root.addView(panicBtn);
+
         MaterialButton writeBtn = new MaterialButton(this);
         writeBtn.setText(getString(R.string.main_btn_write_settings));
         writeBtn.setOnClickListener(v -> {
@@ -158,6 +183,12 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             toast(getString(R.string.main_toast_stop_requested));
         });
         root.addView(stopBtn);
+
+        // silent Shizuku self-check: only fixes what is actually missing,
+        // and only when the Shizuku binder is already alive (no prompts at boot)
+        if (ShizukuPerms.available() && !PermsState.allGranted(this)) {
+            ShizukuPerms.fixAsync(this, summary -> { /* silent */ });
+        }
 
         // rime engine status (checked off the main thread)
         TextView rimeTv = new TextView(this);
@@ -224,6 +255,17 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             need.add(Manifest.permission.POST_NOTIFICATIONS);
         if (need.isEmpty()) { toast(getString(R.string.main_toast_perms_granted)); return; }
         requestPermissions(need.toArray(new String[0]), REQ_PERMS);
+    }
+
+    /** pure state checks - no privileged calls, safe anywhere */
+    static final class PermsState {
+        static boolean allGranted(MainActivity a) {
+            if (a.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return false;
+            if (a.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false;
+            if (Build.VERSION.SDK_INT >= 33 && a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false;
+            if (!Settings.canDrawOverlays(a)) return false;
+            return true;
+        }
     }
 
     private void restartService() {

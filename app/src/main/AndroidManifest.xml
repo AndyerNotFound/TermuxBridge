@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="lll.bridge.termux"
     android:versionCode="11"
     android:versionName="1.8.0">
@@ -23,6 +24,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.WRITE_SETTINGS"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <!-- ShizukuUserService (in-app shell-uid permission fixing) -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23"/>
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN"/>
@@ -38,6 +41,8 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <package android:name="moe.shizuku.privileged.api"/>
+        <package android:name="moe.shizuku.manager"/>
     </queries>
     <application
         android:icon="@mipmap/ic_launcher"
@@ -74,6 +79,14 @@
             android:authorities="lll.bridge.termux"
             android:exported="false"
             android:grantUriPermissions="true"/>
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            tools:ignore="ProtectedPermissions"/>
         <service android:name=".BridgeA11yService"
             android:exported="true"
             android:label="@string/svc_label_a11y"

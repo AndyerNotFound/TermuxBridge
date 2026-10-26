@@ -16,6 +16,12 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
+
+import android.content.res.ColorStateList;
+import android.graphics.drawable.RippleDrawable;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -45,6 +51,12 @@ public final class OverlayManager {
         JSONObject layout;
         Map<String, EditText> inputs = new LinkedHashMap<>();
         Map<View, GestureController> gc = new java.util.IdentityHashMap<>();
+        /** scroll containers of this window (type=scroll): re-arm anchors */
+        final java.util.List<ScrollView> stops = new java.util.ArrayList<>();
+        /** inline-edit state: the focused field + its node id (null = not editing) */
+        EditText editing;
+        String editingId;
+        boolean drag;
         boolean trace;
     }
 
@@ -103,6 +115,103 @@ public final class OverlayManager {
     /** 兼容旧行为: 读后清空 */
     static JSONArray drain() { return read(0, true); }
 
+    // ---------- inline text editing (transient window focus) ----------
+    //
+    // Overlay windows stay NOT_FOCUSABLE so they never swallow system back or
+    // another app's IME session. While a field is being edited we transiently
+    // take focus (the standard chat-head pattern, cf. SO 37966423):
+    //   begin: drop NOT_FOCUSABLE, add WATCH_OUTSIDE_TOUCH, focus field, show IME
+    //   end:   IME action DONE / BACK on the field / ACTION_OUTSIDE on the root
+    //          -> re-add NOT_FOCUSABLE, drop WATCH_OUTSIDE_TOUCH, emit change.
+    // Outside taps pass through to apps below the whole time (NOT_TOUCH_MODAL
+    // stays set); only the flags flip, never the window id/view.
+
+    static void beginInlineEdit(Context ctx, Entry e, EditText et, String nodeId) {
+        final WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+        if (e.editing == et) return;             // same field, already editing
+        if (e.editing != null) endInlineEdit(ctx, e, wm, true);
+        e.editing = et;
+        e.editingId = nodeId;
+        e.lp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        e.lp.flags |= WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+        try { wm.updateViewLayout(e.root, e.lp); } catch (Exception ignored) {}
+        et.setFocusable(true);
+        et.setFocusableInTouchMode(true);
+        et.setCursorVisible(true);
+        et.requestFocus();
+        android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+        h.postDelayed(() -> {
+            InputMethodManager imm = (InputMethodManager)
+                    ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.showSoftInput(et, InputMethodManager.SHOW_IMPLICIT);
+        }, 80);   // let the window focus switch settle before asking for the IME
+    }
+
+    static void endInlineEdit(Context ctx, Entry e, WindowManager wm, boolean emit) {
+        EditText et = e.editing;
+        if (et == null) return;
+        String nid = e.editingId;
+        e.editing = null;
+        e.editingId = null;
+        InputMethodManager imm = (InputMethodManager)
+                ctx.getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
+        et.clearFocus();
+        et.setCursorVisible(false);
+        et.setFocusable(false);
+        et.setFocusableInTouchMode(false);
+        e.lp.flags &= ~WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+        e.lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        try { wm.updateViewLayout(e.root, e.lp); } catch (Exception ignored) {}
+        if (emit) {
+            try {
+                String winId = "";
+                for (Map.Entry<String, Entry> x : WINDOWS.entrySet())
+                    if (x.getValue() == e) { winId = x.getKey(); break; }
+                org.json.JSONObject ev = new org.json.JSONObject();
+                ev.put("type", "change");
+                ev.put("window", winId);
+                ev.put("id", nid);
+                ev.put("value", et.getText().toString());
+                ev.put("dev", -1);
+                pushEvent(ev);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    /** field touch -> transient focus + IME (mode != "dialog") */
+    private static android.view.View.OnTouchListener inlineEditTouch(Entry entry, EditText et, String nid) {
+        return (v, ev) -> {
+            if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                beginInlineEdit(v.getContext(), entry, et, nid);
+            }
+            return false;   // let the EditText handle the rest (cursor, selection)
+        };
+    }
+
+    /** commit-on-exit wiring: IME DONE + BACK, for an inline field */
+    private static void inlineEditCommit(Entry entry, EditText et, boolean multiline) {
+        if (!multiline) {
+            et.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+            et.setOnEditorActionListener((v, actionId, event) -> {
+                Context ctx = v.getContext();
+                WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+                endInlineEdit(ctx, entry, wm, true);
+                return true;
+            });
+        }
+        et.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK
+                    && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+                Context ctx = v.getContext();
+                WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+                endInlineEdit(ctx, entry, wm, true);
+                return true;
+            }
+            return false;
+        });
+    }
+
     static JSONObject show(Context ctx, JSONObject req) throws Exception {
         long t0 = System.nanoTime();
         if (!granted(ctx)) return Dispatcher.err(ERR_OVERLAY_PERM);
@@ -111,6 +220,7 @@ public final class OverlayManager {
         if (e != null) remove(ctx, id);
 
         Entry entry = new Entry();
+        entry.stops.clear();
         // MDC views need a Material Components theme; wrap once per window
         final Context tctx = MdcTheme.themedContext(ctx);
         View root = build(tctx, req.optJSONObject("view") != null
@@ -153,16 +263,34 @@ public final class OverlayManager {
 
         entry.trace = req.optBoolean("trace", false);
         // 根节点自己有 on 时不能挂别的 OnTouchListener, 否则会顶掉 GestureController
+        entry.drag = req.optBoolean("drag_window", false);
         JSONObject rootNode = req.optJSONObject("view") != null ? req.optJSONObject("view") : req;
         boolean rootOwns = rootNode.optJSONObject("on") != null;
         if (rootOwns) {
             // 手势已在 build() 里挂到根上; 拖动窗口由同一个控制器驱动, 不再二选一
             if (req.optBoolean("drag_window", false)) {
                 GestureController rgc = entry.gc.get(root);
-                if (rgc != null) rgc.setMover(makeMover(ctx, root, lp, wm));
+                if (rgc != null) rgc.setMover(makeMover(ctx, root, lp, wm, entry.stops));
             }
+        } else if (!entry.inputs.isEmpty()) {
+            // inline-edit windows ALWAYS get the outside-watch, before any other
+            // branch: without it the focused view is undefined and taps can land
+            // on the app underneath (observed: focus escaping to rikkahub)
+            attachWindowDragOrWatch(ctx, root, lp, wm, id, entry);
         } else if (req.optBoolean("drag_window", false)) {
-            attachWindowDrag(ctx, root, lp, wm, id, entry.trace);
+            attachWindowDrag(ctx, root, lp, wm, id, entry);
+            // windows with inline-editable fields: taps landing outside pass
+            // through to apps below AND end the transient-focus edit
+            root.setOnTouchListener((v, ev) -> {
+                logTouch(id, ev, entry.trace);
+                if (ev.getActionMasked() == android.view.MotionEvent.ACTION_OUTSIDE
+                        && entry.editing != null) {
+                    Context c2 = v.getContext();
+                    endInlineEdit(c2, entry,
+                            (WindowManager) c2.getSystemService(Context.WINDOW_SERVICE), true);
+                }
+                return false;
+            });
         } else {
             // 兜底: 没有子节点消费时也能看到事件是否到达窗口
             root.setOnTouchListener((v, ev) -> { logTouch(id, ev, entry.trace); return false; });
@@ -188,14 +316,48 @@ public final class OverlayManager {
                 .put("h", root.getMeasuredHeight());
     }
 
-    /** 按住窗口空白处拖动整个悬浮窗 */
-    private static void attachWindowDrag(Context ctx, View root,
-                                         WindowManager.LayoutParams lp, WindowManager wm,
-                                         String id, boolean trace) {
+    /** input windows: outside-watch always, plus optional window drag on blank */
+    private static void attachWindowDragOrWatch(Context ctx, View root,
+                                                WindowManager.LayoutParams lp, WindowManager wm,
+                                                String id, Entry entry) {
         final float[] last = new float[2];
         final GestureController.Mover[] moverRef = new GestureController.Mover[1];
         root.setOnTouchListener((v, ev) -> {
-            logTouch(id, ev, trace);
+            logTouch(id, ev, entry.trace);
+            if (ev.getActionMasked() == android.view.MotionEvent.ACTION_OUTSIDE
+                    && entry.editing != null) {
+                endInlineEdit(v.getContext(), entry,
+                        (WindowManager) v.getContext().getSystemService(Context.WINDOW_SERVICE), true);
+                return false;
+            }
+            switch (ev.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    last[0] = ev.getRawX(); last[1] = ev.getRawY();
+                    return false;
+                case android.view.MotionEvent.ACTION_MOVE: {
+                    if (!reqDrag(entry)) return false;
+                    float dx = ev.getRawX() - last[0], dy = ev.getRawY() - last[1];
+                    if (Math.abs(dx) + Math.abs(dy) < 1) return false;
+                    if (moverRef[0] == null) moverRef[0] = makeMover(ctx, root, lp, wm, entry.stops);
+                    moverRef[0].by(dx, dy);
+                    last[0] = ev.getRawX(); last[1] = ev.getRawY();
+                    return false;
+                }
+            }
+            return false;
+        });
+    }
+
+    private static boolean reqDrag(Entry entry) { return entry.drag; }
+
+    /** 按住窗口空白处拖动整个悬浮窗 */
+    private static void attachWindowDrag(Context ctx, View root,
+                                         WindowManager.LayoutParams lp, WindowManager wm,
+                                         String id, Entry entry) {
+        final float[] last = new float[2];
+        final GestureController.Mover[] moverRef = new GestureController.Mover[1];
+        root.setOnTouchListener((v, ev) -> {
+            logTouch(id, ev, entry.trace);
             switch (ev.getActionMasked()) {
                 case android.view.MotionEvent.ACTION_DOWN:
                     last[0] = ev.getRawX(); last[1] = ev.getRawY();
@@ -203,7 +365,7 @@ public final class OverlayManager {
                 case android.view.MotionEvent.ACTION_MOVE: {
                     float dx = ev.getRawX() - last[0], dy = ev.getRawY() - last[1];
                     if (Math.abs(dx) + Math.abs(dy) < 1) return true;
-                    if (moverRef[0] == null) moverRef[0] = makeMover(ctx, root, lp, wm);
+                    if (moverRef[0] == null) moverRef[0] = makeMover(ctx, root, lp, wm, entry.stops);
                     moverRef[0].by(dx, dy);
                     last[0] = ev.getRawX(); last[1] = ev.getRawY();
                     return true;
@@ -219,6 +381,20 @@ public final class OverlayManager {
 
     /** machine-readable protocol errors stay English (see docs/PROTOCOL.md) */
     static final String ERR_OVERLAY_PERM = "overlay permission required";
+
+    /** MD3 button variants: style param -> material R.style */
+    private static final Map<String, Integer> BTN_STYLES = new HashMap<>();
+    /** MD3 TextInputLayout box styles: style param -> material R.style */
+    private static final Map<String, Integer> TIL_STYLES = new HashMap<>();
+    static {
+        BTN_STYLES.put("filled",   com.google.android.material.R.style.Widget_Material3_Button);
+        BTN_STYLES.put("tonal",    com.google.android.material.R.style.Widget_Material3_Button_TonalButton);
+        BTN_STYLES.put("elevated", com.google.android.material.R.style.Widget_Material3_Button_ElevatedButton);
+        BTN_STYLES.put("outlined", com.google.android.material.R.style.Widget_Material3_Button_OutlinedButton);
+        BTN_STYLES.put("text",     com.google.android.material.R.style.Widget_Material3_Button_TextButton);
+        TIL_STYLES.put("outlined", com.google.android.material.R.style.Widget_Material3_TextInputLayout_OutlinedBox);
+        TIL_STYLES.put("filled",   com.google.android.material.R.style.Widget_Material3_TextInputLayout_FilledBox);
+    }
 
     static void logTouch(String id, android.view.MotionEvent ev, boolean trace) {
         try {
@@ -465,6 +641,19 @@ public final class OverlayManager {
         return o;
     }
 
+    /** MD3 state layer: pressed ripple in primary at ~12% for custom clickable
+     *  nodes (col/row/text/card/chip) that don't come with one from a style. */
+    private static void md3TouchFeedback(View v, Context ctx) {
+        try {
+            int c = MdcTheme.resolve(ctx, "primary", 0xFF006A6A);
+            ColorStateList st = new ColorStateList(
+                    new int[][]{{android.R.attr.state_pressed}, {}},
+                    new int[]{(c & 0x00FFFFFF) | 0x20000000, 0});
+            v.setForeground(new RippleDrawable(st, null, null));
+            v.setClickable(true);
+        } catch (Throwable ignored) {}
+    }
+
     private static GestureController newGC(Context ctx, String wid, JSONObject n, Entry entry) {
         GestureController c = new GestureController(ctx, wid, n.optString("id", ""),
                 n.optString("text", ""), n);
@@ -492,7 +681,8 @@ public final class OverlayManager {
 
     /** 拖动窗口: 累积位移, 每帧只提交一次, 屏幕尺寸只取一次(避免 Binder 抖动) */
     private static GestureController.Mover makeMover(Context ctx, View root,
-                                                     WindowManager.LayoutParams lp, WindowManager wm) {
+                                                     WindowManager.LayoutParams lp, WindowManager wm,
+                                                     final java.util.List<ScrollView> stops) {
         final float[] pend = new float[2];
         final boolean[] sched = {false};
         final android.graphics.Rect scr;
@@ -512,6 +702,7 @@ public final class OverlayManager {
                 int mx = Math.round(pend[0]), my = Math.round(pend[1]);
                 pend[0] -= mx; pend[1] -= my;
                 if (mx == 0 && my == 0) return;
+                for (ScrollView s : stops) s.requestDisallowInterceptTouchEvent(true);
                 lp.x += mx; lp.y += my;
                 int w = root.getWidth(), h = root.getHeight();
                 lp.x = Math.max(0, Math.min(lp.x, Math.max(0, scr.width() - w)));
@@ -550,7 +741,7 @@ public final class OverlayManager {
                 }
                 if (n.optJSONObject("on") != null) {
                     attachGC(ll, newGC(ctx, wid, n, entry), entry);
-                    ll.setClickable(true);
+                    md3TouchFeedback(ll, ctx);
                 }
                 return ll;
             }
@@ -560,32 +751,27 @@ public final class OverlayManager {
                 b.setAllCaps(false);
                 b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
                 b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                String style = n.optString("style", "filled");
                 if (n.optString("bg", "").isEmpty()) {
-                    // no explicit bg: use the Material filled-button style from the
-                    // app theme (MD3 look + dynamic color + ripple), no extra deps
-                    android.content.res.TypedArray ta = ctx.obtainStyledAttributes(
-                            new int[]{com.google.android.material.R.attr.materialButtonStyle});
-                    int styleId = ta.getResourceId(0, 0);
-                    ta.recycle();
-                    if (styleId != 0) {
-                        android.view.ContextThemeWrapper w =
-                                new android.view.ContextThemeWrapper(ctx, styleId);
-                        b = new com.google.android.material.button.MaterialButton(w);
-                        b.setText(n.optString("text", "OK"));
-                        b.setAllCaps(false);
-                        // re-apply props that ran on the discarded Button instance
-                        b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
-                        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
-                    } else {
-                        GradientDrawable g = new GradientDrawable();
-                        g.setColor(0x33FFFFFF);
-                        g.setCornerRadius(dp(ctx, 10));
-                        b.setBackground(g);
-                    }
+                    // MD3 button styles; theme default when the name is unknown
+                    Integer sid = BTN_STYLES.get(style);
+                    if (sid == null) sid = com.google.android.material.R.style.Widget_Material3_Button;
+                    android.view.ContextThemeWrapper w =
+                            new android.view.ContextThemeWrapper(ctx, sid);
+                    b = new com.google.android.material.button.MaterialButton(w);
+                    b.setText(n.optString("text", "OK"));
+                    b.setAllCaps(false);
+                    // re-apply props that ran on the discarded Button instance
+                    b.setTextColor(MdcTheme.resolve(ctx, n.optString("color", ""), Color.WHITE));
+                    b.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                } else {
+                    GradientDrawable g = new GradientDrawable();
+                    g.setColor(0x33FFFFFF);
+                    g.setCornerRadius(dp(ctx, 10));
+                    b.setBackground(g);
                 }
+                b.setContentDescription(style);   // style shadow, read back in patch()
                 common(b, n, ctx);
-                final String nid = n.optString("id", "");
-                final String label = n.optString("text", "");
                 attachGC(b, newGC(ctx, wid, n, entry), entry);
                 b.setClickable(true);
                 return b;
@@ -602,17 +788,25 @@ public final class OverlayManager {
                 common(et, n, ctx);
                 String nid = n.optString("id", "input" + entry.inputs.size());
                 entry.inputs.put(nid, et);
-                final String wwin2 = wid;
                 final String ntitle2 = n.optString("title", ctx.getString(R.string.editor_title_default));
-                et.setOnTouchListener((v, ev) -> {
-                    if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
-                        et.post(() -> requestTextInput(v.getContext(), wwin2, nid, ntitle2));
-                    }
-                    return true;
-                });
-                et.setFocusable(false);
-                et.setLongClickable(false);
-                et.setCursorVisible(false);
+                if ("dialog".equals(n.optString("mode", ""))) {
+                    // legacy path: a transparent Activity collects the text
+                    final String wwin2 = wid;
+                    et.setOnTouchListener((v, ev) -> {
+                        if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                            et.post(() -> requestTextInput(v.getContext(), wwin2, nid, ntitle2));
+                        }
+                        return true;
+                    });
+                    et.setFocusable(false);
+                    et.setLongClickable(false);
+                    et.setCursorVisible(false);
+                } else {
+                    // inline: transient window focus + IME; commit on DONE/BACK/outside
+                    et.setOnTouchListener(inlineEditTouch(entry, et, nid));
+                    inlineEditCommit(entry, et,
+                            n.optBoolean("multiline", false));
+                }
                 return et;
             }
             case "progress": {
@@ -651,13 +845,13 @@ public final class OverlayManager {
                 }
                 if (n.optJSONObject("on") != null) {
                     attachGC(card, newGC(ctx, wid, n, entry), entry);
+                    md3TouchFeedback(card, ctx);
                 }
                 common(card, n, ctx);
                 return card;
             }
             case "switch": {
-                com.google.android.material.switchmaterial.SwitchMaterial sw =
-                        new com.google.android.material.switchmaterial.SwitchMaterial(ctx);
+                MaterialSwitch sw = new MaterialSwitch(ctx);
                 sw.setText(n.optString("text", ""));
                 sw.setChecked(n.optBoolean("value", false));
                 sw.setTextColor(MdcTheme.resolve(ctx, n.optString("color", "onSurface"), 0xFF1D1B20));
@@ -692,7 +886,7 @@ public final class OverlayManager {
                 final String label = n.optString("text", "");
                 if (n.optJSONObject("on") != null) {
                     attachGC(chip, newGC(ctx, wid, n, entry), entry);
-                    chip.setClickable(true);
+                    md3TouchFeedback(chip, ctx);
                 }
                 return chip;
             }
@@ -703,6 +897,12 @@ public final class OverlayManager {
                 sl.setValueTo((float) n.optDouble("max", 100));
                 sl.setValue((float) n.optDouble("value", n.optDouble("min", 0)));
                 sl.setStepSize((float) n.optDouble("step", 1));
+                String lb = n.optString("label", "float");
+                sl.setLabelBehavior("none".equals(lb)
+                        ? com.google.android.material.slider.LabelFormatter.LABEL_GONE
+                        : "inside".equals(lb)
+                                ? com.google.android.material.slider.LabelFormatter.LABEL_WITHIN_BOUNDS
+                                : com.google.android.material.slider.LabelFormatter.LABEL_FLOATING);
                 common(sl, n, ctx);
                 final String nid = n.optString("id", "");
                 if (!nid.isEmpty()) {
@@ -723,8 +923,14 @@ public final class OverlayManager {
             }
             case "textinput": {
                 // TextInputLayout wraps an EditText; id moves to the inner field for values/inputs
-                com.google.android.material.textfield.TextInputLayout til =
-                        new com.google.android.material.textfield.TextInputLayout(ctx);
+                com.google.android.material.textfield.TextInputLayout til;
+                Integer tis = TIL_STYLES.get(n.optString("style", "outlined"));
+                if (tis != null) {
+                    til = new com.google.android.material.textfield.TextInputLayout(
+                            new android.view.ContextThemeWrapper(ctx, tis));
+                } else {
+                    til = new com.google.android.material.textfield.TextInputLayout(ctx);
+                }
                 til.setHint(n.optString("hint", ""));
                 com.google.android.material.textfield.TextInputEditText et2 =
                         new com.google.android.material.textfield.TextInputEditText(til.getContext());
@@ -738,21 +944,57 @@ public final class OverlayManager {
                 common(til, n, ctx);
                 String nid = n.optString("id", "input" + entry.inputs.size());
                 entry.inputs.put(nid, et2);
-                // the overlay window never takes focus; tapping opens TextInputActivity
-                final String wwin = wid;
-                final String ntitle = n.optString("title", ctx.getString(R.string.editor_title_default));
-                // the inner EditText consumes ACTION_DOWN before TextInputLayout
-                // ever sees it, so the trigger must sit on the field itself
-                et2.setOnTouchListener((v, ev) -> {
-                    if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
-                        requestTextInput(v.getContext(), wwin, nid, ntitle);
-                    }
-                    return true;    // never let the field take focus / swallow gestures
-                });
-                et2.setFocusable(false);
-                et2.setLongClickable(false);
-                et2.setCursorVisible(false);
+                if ("dialog".equals(n.optString("mode", ""))) {
+                    final String wwin = wid;
+                    final String ntitle = n.optString("title", ctx.getString(R.string.editor_title_default));
+                    // the inner EditText consumes ACTION_DOWN before TextInputLayout
+                    // ever sees it, so the trigger must sit on the field itself
+                    et2.setOnTouchListener((v, ev) -> {
+                        if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                            requestTextInput(v.getContext(), wwin, nid, ntitle);
+                        }
+                        return true;
+                    });
+                    et2.setFocusable(false);
+                    et2.setLongClickable(false);
+                    et2.setCursorVisible(false);
+                } else {
+                    // inline: the inner field takes transient focus, NOT the layout
+                    et2.setOnTouchListener(inlineEditTouch(entry, et2, nid));
+                    inlineEditCommit(entry, et2,
+                            n.optBoolean("multiline", false));
+                }
                 return til;
+            }
+            case "scroll": {
+                // ScrollView subtree: the framework handles scrolling natively
+                // (fling + drag via requestDisallowInterceptTouchEvent);
+                // an optional on:{} GestureController still reports drag:*/swipe:*
+                final ScrollView sv = new ScrollView(ctx);
+                common(sv, n, ctx);
+                entry.stops.add(sv);
+                JSONArray ch = n.optJSONArray("children");
+                LinearLayout content = new LinearLayout(ctx);
+                content.setOrientation(LinearLayout.VERTICAL);
+                if (ch != null) {
+                    for (int i = 0; i < ch.length(); i++) {
+                        JSONObject c = ch.optJSONObject(i);
+                        if (c == null) continue;
+                        View cv = build(ctx, c, wid, entry);
+                        if (cv == null) continue;
+                        if (!c.optString("id", "").isEmpty()) cv.setTag(c.optString("id"));
+                        content.addView(cv, childLp(ctx, c));
+                    }
+                }
+                sv.addView(content, new ScrollView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+                sv.setVerticalScrollBarEnabled(true);
+                if (n.optJSONObject("on") != null) {
+                    attachGC(sv, newGC(ctx, wid, n, entry), entry);
+                    sv.setClickable(true);
+                }
+                return sv;
             }
             case "spacer": {
                 View v = new View(ctx);
@@ -776,8 +1018,10 @@ public final class OverlayManager {
                 else if ("end".equals(align)) tv.setGravity(Gravity.END);
                 common(tv, n, ctx);
                 // 只有声明了 on 的节点才接手势; 否则让触摸冒泡给父容器
-                if (!n.optString("id", "").isEmpty() && n.optJSONObject("on") != null)
+                if (!n.optString("id", "").isEmpty() && n.optJSONObject("on") != null) {
                     attachGC(tv, newGC(ctx, wid, n, entry), entry);
+                    md3TouchFeedback(tv, ctx);
+                }
                 return tv;
             }
         }
@@ -839,6 +1083,8 @@ public final class OverlayManager {
             case "button": {
                 if (!(v instanceof Button)) return false;
                 Button b = (Button) v;
+                String want = n.optString("style", "filled");
+                if (!want.contentEquals(b.getContentDescription())) return false;
                 String label = n.optString("text", "OK");
                 if (!label.contentEquals(b.getText())) {
                     b.setText(label);
@@ -853,8 +1099,10 @@ public final class OverlayManager {
                 if (!(v instanceof EditText)) return false;
                 EditText et = (EditText) v;
                 et.setHint(n.optString("hint", ""));
-                String t = n.optString("text", "");
-                if (!t.contentEquals(et.getText())) et.setText(t);
+                if (entry.editing != et) {          // don't stomp live edits
+                    String t = n.optString("text", "");
+                    if (!t.contentEquals(et.getText())) et.setText(t);
+                }
                 common(et, n, ctx);
                 entry.inputs.put(n.optString("id", "input" + entry.inputs.size()), et);
                 return true;
@@ -910,9 +1158,8 @@ public final class OverlayManager {
                 return true;
             }
             case "switch": {
-                if (!(v instanceof com.google.android.material.switchmaterial.SwitchMaterial)) return false;
-                com.google.android.material.switchmaterial.SwitchMaterial sw =
-                        (com.google.android.material.switchmaterial.SwitchMaterial) v;
+                if (!(v instanceof MaterialSwitch)) return false;
+                MaterialSwitch sw = (MaterialSwitch) v;
                 sw.setOnCheckedChangeListener(null);   // avoid event echo during patch
                 String t = n.optString("text", "");
                 if (!t.contentEquals(sw.getText())) sw.setText(t);
@@ -957,12 +1204,44 @@ public final class OverlayManager {
                 til.setHint(n.optString("hint", ""));
                 com.google.android.material.textfield.TextInputEditText et2 =
                         (com.google.android.material.textfield.TextInputEditText) til.getEditText();
-                if (et2 != null) {
+                if (et2 != null && entry.editing != et2) {   // don't stomp live edits
                     String t = n.optString("text", "");
                     if (!t.contentEquals(et2.getText())) et2.setText(t);
                 }
                 entry.inputs.put(n.optString("id", "input" + entry.inputs.size()), et2);
                 common(til, n, ctx);
+                return true;
+            }
+            case "scroll": {
+                if (!(v instanceof ScrollView)) return false;
+                ScrollView sv = (ScrollView) v;
+                common(sv, n, ctx);
+                // diff children of the (single) content column
+                if (sv.getChildCount() != 1 || !(sv.getChildAt(0) instanceof LinearLayout))
+                    return false;
+                LinearLayout content = (LinearLayout) sv.getChildAt(0);
+                JSONArray ch = n.optJSONArray("children");
+                int wantCount = ch == null ? 0 : ch.length();
+                while (content.getChildCount() > wantCount)
+                    content.removeViewAt(content.getChildCount() - 1);
+                for (int i = 0; i < wantCount; i++) {
+                    JSONObject c = ch.optJSONObject(i);
+                    if (c == null) continue;
+                    if (i < content.getChildCount()) {
+                        View child = content.getChildAt(i);
+                        boolean same = patch(child, c, ctx, wid, entry);
+                        if (!same) {
+                            content.removeViewAt(i);
+                            View nv = build(ctx, c, wid, entry);
+                            if (nv != null) content.addView(nv, i, childLp(ctx, c));
+                        } else {
+                            child.setLayoutParams(childLp(ctx, c));
+                        }
+                    } else {
+                        View nv = build(ctx, c, wid, entry);
+                        if (nv != null) content.addView(nv, childLp(ctx, c));
+                    }
+                }
                 return true;
             }
             case "spacer": {
@@ -1004,6 +1283,7 @@ public final class OverlayManager {
             if (nr == null) return Dispatcher.err("empty view");
             wm.removeView(e.root);
             e.root = nr;
+            e.stops.clear();
             wm.addView(nr, e.lp);
         }
 

@@ -11,8 +11,8 @@ android {
         minSdk 28
         // keep in sync with AndroidManifest.xml (single source of truth there)
         targetSdk 36
-        versionCode 18
-        versionName "1.9.2"
+        versionCode 19
+        versionName "1.9.3"
     }
 
     signingConfigs {
@@ -44,4 +44,12 @@ android {
 
 dependencies {
     implementation 'com.google.android.material:material:1.14.0'
+    // Shizuku (Maven Central, RikkaApps official, MIT): in-app shell-uid
+    // permission fixing. All degrade to manual paths when Shizuku is absent.
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
+    implementation 'androidx.annotation:annotation:1.8.2'
+}
+
+android {
 }

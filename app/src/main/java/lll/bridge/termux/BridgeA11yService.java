@@ -82,6 +82,13 @@ public class BridgeA11yService extends AccessibilityService {
 
     static boolean ready() { return INSTANCE != null; }
 
+    /** panic.stop: official self-revocation - system unbinds us and clears
+     *  enabled_accessibility_services on its own. */
+    static void selfStop() {
+        BridgeA11yService s = INSTANCE;
+        if (s != null) { s.disableSelf(); s.stopSelf(); }
+    }
+
     /** 截图, 图像编码为 PNG base64。执行线程需非主线程(内部会等待)。 */
     static JSONObject screenshot() throws Exception {
         final BridgeA11yService svc = INSTANCE;
