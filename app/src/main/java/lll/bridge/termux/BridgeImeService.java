@@ -46,6 +46,7 @@ public class BridgeImeService extends InputMethodService {
     private boolean asciiMode = false;
     private boolean shifted = false;
     private boolean symbols = false;
+    private int symPage = 0;
     private boolean engineUp = true;
     private long sentSeq = -1;
 
@@ -185,122 +186,236 @@ public class BridgeImeService extends InputMethodService {
         return r;
     }
 
+    /** fcitx5 AlphabetKey: main char on tap, alt char on swipe-up (per-letter map) */
+    private static final String[][] QWERTY = {
+        {"q1", "w2", "e3", "r4", "t5", "y6", "u7", "i8", "o9", "p0"},
+        {"a@", "s*", "d+", "f-", "g=", "h/", "j#", "k(", "l)"},
+        {"z'", "x:", "c\"", "v?", "b!", "n~", "m\\"}
+    };
+
     private View buildQwerty() {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
-        String[][] rows = {
-            {"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
-            {"a", "s", "d", "f", "g", "h", "j", "k", "l"},
-            {"shift", "z", "x", "c", "v", "b", "n", "m", "⌫"},
-            {"mode", "?123", "Space", ".", "⏎"},
-        };
-        for (int ri = 0; ri < rows.length; ri++) {
+        for (int ri = 0; ri < QWERTY.length; ri++) {
             LinearLayout r = keyRow();
-            for (String k : rows[ri]) {
-                switch (k) {
-                    case "mode": {
-                        modeKey = cap("", 1.5f, false);
-                        modeKey.setOnClickListener(v -> toggleAscii());
-                        modeKey.setOnLongClickListener(v -> { pickSchema(v); return true; });
-                        r.addView(modeKey, lp(1.5f));
-                        break;
-                    }
-                    case "shift":
-                        shiftKey = cap("⇧", 1.5f, false);
-                        shiftKey.setOnClickListener(v -> { shifted = !shifted; paintShift(); });
-                        r.addView(shiftKey, lp(1.5f));
-                        break;
-                    case "⌫":
-                        TextView bk = cap("⌫", 1.5f, true);
-                        bk.setOnClickListener(v -> onKey((char) 0xff08));
-                        bk.setOnLongClickListener(v -> {
-                            io.execute(() -> main.post(() -> {
-                                InputConnection ic = getCurrentInputConnection();
-                                if (ic != null) ic.deleteSurroundingText(20, 0);
-                            }));
-                            return true;
-                        });
-                        r.addView(bk, lp(1.5f));
-                        break;
-                    case "?123":
-                        TextView sy = cap("?123", 1.5f, true);
-                        sy.setOnClickListener(v -> { symbols = !symbols; rebuildMain(); });
-                        r.addView(sy, lp(1.5f));
-                        break;
-                    case "Space":
-                        TextView sp = cap(getString(R.string.ime_key_space), 5f, true);
-                        sp.setOnClickListener(v -> onKey(' '));
-                        r.addView(sp, lp(5f));
-                        break;
-                    case "⏎":
-                        TextView en = cap("⏎", 1.5f, true);
-                        en.setOnClickListener(v -> enter());
-                        r.addView(en, lp(1.5f));
-                        break;
-                    default:
-                        TextView t = cap(k, 1f, true);
-                        t.setOnClickListener(v -> onKey(k.charAt(0)));
-                        r.addView(t, lp(1f));
-                }
+            if (ri == 2) {
+                shiftKey = cap("", 1.5f, false);
+                shiftKey.setOnClickListener(v -> tapShift());
+                r.addView(shiftKey, lp(1.5f));
+            }
+            for (String pair : QWERTY[ri]) {
+                r.addView(altKey(pair.charAt(0), pair.charAt(1)), lp(1f));
+            }
+            if (ri == 2) {
+                TextView bk = backspaceKey(1.5f);
+                r.addView(bk, lp(1.5f));
             }
             grid.addView(r);
         }
+        grid.addView(bottomRow());
         return grid;
     }
 
-    private LinearLayout buildSymbols() {
+    private View buildSymbols() {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
         String[][] rows = {
             {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
-            {"@", "#", "￥", "%", "&", "*", "-", "+", "=", "/"},
-            {"~", "^", "!", ":", ";", "(", ")", "_", "⌫"},
-            {"abc", ",", "Space", ".", "⏎"},
+            {"@", "#", "\u00a5", "%", "&", "*", "-", "+", "=", "/"},
+            {"[SYM2]", "(", ")", ":", ";", "'", "\"", "?", "!", "⌫"},
         };
         for (String[] row : rows) {
             LinearLayout r = keyRow();
             for (String k : row) {
-                switch (k) {
-                    case "⌫": {
-                        TextView bk = cap("⌫", 1.5f, true);
-                        bk.setOnClickListener(v -> onKey((char) 0xff08));
-                        r.addView(bk, lp(1.5f));
-                        break;
-                    }
-                    case "abc": {
-                        TextView ab = cap("abc", 1.5f, true);
-                        ab.setOnClickListener(v -> { symbols = false; rebuildMain(); });
-                        r.addView(ab, lp(1.5f));
-                        break;
-                    }
-                    case "Space": {
-                        TextView sp = cap(getString(R.string.ime_key_space), 5f, true);
-                        sp.setOnClickListener(v -> onKey(' '));
-                        r.addView(sp, lp(5f));
-                        break;
-                    }
-                    case "⏎": {
-                        TextView en = cap("⏎", 1.5f, true);
-                        en.setOnClickListener(v -> enter());
-                        r.addView(en, lp(1.5f));
-                        break;
-                    }
-                    default: {
-                        TextView t = cap(k, 1f, true);
-                        t.setOnClickListener(v -> onKey(k.charAt(0)));
-                        r.addView(t, lp(1f));
-                    }
+                if (k.equals("⌫")) {
+                    r.addView(backspaceKey(1.5f), lp(1.5f));
+                } else if (k.equals("[SYM2]")) {
+                    TextView t = cap("中文", 1.5f, true);
+                    t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+                    t.setOnClickListener(v -> { symPage = 1; rebuildMain(); });
+                    r.addView(t, lp(1.5f));
+                } else {
+                    TextView t = cap(k, 1f, true);
+                    t.setOnClickListener(v -> onKey(k.charAt(0)));
+                    r.addView(t, lp(1f));
                 }
             }
             grid.addView(r);
         }
+        grid.addView(bottomRow());
         return grid;
+    }
+
+    private View buildSymZh() {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        String[][] rows = {
+            {"\uff0c", "\u3002", "\uff1f", "\uff01", "\uff1a", "\uff1b", "\u3001", "\u2026\u2026", "\u2014\u2014", "\u00b7"},
+            {"\u300c", "\u300d", "\uff08", "\uff09", "\u300a", "\u300b", "\u3010", "\u3011", "[", "]"},
+            {"[SYM1]", "{", "}", "\u201c", "\u201d", "\u2018", "\u2019", "~", "@", "⌫"},
+        };
+        for (String[] row : rows) {
+            LinearLayout r = keyRow();
+            for (String k : row) {
+                if (k.equals("⌫")) {
+                    r.addView(backspaceKey(1.5f), lp(1.5f));
+                } else if (k.equals("[SYM1]")) {
+                    TextView t = cap("?123", 1.5f, true);
+                    t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+                    t.setOnClickListener(v -> { symPage = 0; rebuildMain(); });
+                    r.addView(t, lp(1.5f));
+                } else {
+                    TextView t = cap(k, 1f, true);
+                    t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+                    t.setOnClickListener(v -> onKey(k.charAt(0)));
+                    r.addView(t, lp(1f));
+                }
+            }
+            grid.addView(r);
+        }
+        grid.addView(bottomRow());
+        return grid;
+    }
+
+    private LinearLayout bottomRow() {
+        LinearLayout r = keyRow();
+        modeKey = cap("", 1.5f, false);
+        modeKey.setOnClickListener(v -> toggleAscii());
+        modeKey.setOnLongClickListener(v -> { pickSchema(v); return true; });
+        r.addView(modeKey, lp(1.5f));
+        TextView sy = cap(symbols ? (symPage == 0 ? "abc" : "?123") : "?123", 1.5f, true);
+        sy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        sy.setOnClickListener(v -> {
+            if (!symbols) { symbols = true; symPage = 0; }
+            else if (symPage == 0) { symPage = 1; }
+            else { symbols = false; }
+            rebuildMain();
+        });
+        r.addView(sy, lp(1.5f));
+        TextView sp = cap(getString(R.string.ime_key_space), 5f, true);
+        sp.setOnClickListener(v -> onKey(' '));
+        r.addView(sp, lp(5f));
+        TextView dot = cap(".", 1f, true);
+        dot.setOnClickListener(v -> onKey('.'));
+        r.addView(dot, lp(1f));
+        TextView en = cap("⏎", 1.5f, true);
+        en.setOnClickListener(v -> enter());
+        r.addView(en, lp(1.5f));
+        return r;
+    }
+
+    /** letter key with top-right alt label; tap = letter, swipe up = alt */
+    private View altKey(char main, char alt) {
+        FrameLayout w = new FrameLayout(this);
+        TextView m = cap(String.valueOf(main), 1f, true);
+        w.addView(m, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        TextView a = new TextView(this);
+        a.setText(String.valueOf(alt));
+        a.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        a.setTextColor(KEY_FG_DIM);
+        FrameLayout.LayoutParams alp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END);
+        alp.setMargins(0, dp(4), dp(6), 0);
+        w.addView(a, alp);
+        w.setTag(m);
+        w.setOnTouchListener(newSwipe(w, main, alt));
+        return w;
+    }
+
+    /** fcitx5-style gesture: tap fires main, swipe up (>= 22dp) fires alt */
+    private View.OnTouchListener newSwipe(View w, final char main, final char alt) {
+        final float[] downY = {0};
+        final boolean[] fired = {false};
+        return (v, ev) -> {
+            TextView m = (TextView) w.getTag();
+            switch (ev.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    downY[0] = ev.getY();
+                    fired[0] = false;
+                    v.setPressed(true);
+                    return true;
+                case android.view.MotionEvent.ACTION_MOVE:
+                    if (!fired[0] && downY[0] - ev.getY() > dp(22)) {
+                        fired[0] = true;
+                        v.setPressed(false);
+                        onKey(alt);
+                    }
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                    v.setPressed(false);
+                    if (!fired[0]) {
+                        boolean up = shifted && !symbols && Character.isLetter(main);
+                        onKey(up ? Character.toUpperCase(main) : main);
+                    }
+                    return true;
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    v.setPressed(false);
+                    return true;
+            }
+            return false;
+        };
+    }
+
+    /** backspace with long-press auto-repeat; rime deletes composition, local deletes text */
+    private TextView backspaceKey(float weight) {
+        TextView bk = cap("⌫", weight, true);
+        final Runnable[] tick = {null};
+        final Handler h = new Handler();
+        tick[0] = new Runnable() {
+            @Override public void run() { doBackspace(); h.postDelayed(this, 60); }
+        };
+        bk.setOnTouchListener((v, ev) -> {
+            switch (ev.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    v.setPressed(true);
+                    doBackspace();
+                    h.postDelayed(tick[0], 380);
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    v.setPressed(false);
+                    h.removeCallbacks(tick[0]);
+                    return true;
+            }
+            return false;
+        });
+        return bk;
+    }
+
+    private void doBackspace() {
+        if (!asciiMode && engineUp && !RimeBridge.preedit.isEmpty()) {
+            send(jq("op", "key", "key", 0xff08), this::backspace);
+        } else {
+            backspace();
+        }
+    }
+
+    /** shift: tap = once (auto release), tap again within 300ms = lock */
+    private long lastShiftTap = 0;
+    private boolean shiftLock = false;
+
+    private void tapShift() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastShiftTap < 300) {
+            shiftLock = true;
+            shifted = true;
+        } else if (shiftLock) {
+            shiftLock = false;
+            shifted = false;
+        } else {
+            shifted = !shifted;
+        }
+        lastShiftTap = now;
+        paintShift();
     }
 
     private void rebuildMain() {
         LinearLayout area = (LinearLayout) kbRoot.getChildAt(kbRoot.getChildCount() - 1);
         area.removeAllViews();
-        area.addView(symbols ? buildSymbols() : buildQwerty());
+        area.addView(symbols ? (symPage == 0 ? buildSymbols() : buildSymZh()) : buildQwerty());
+        paintShift();
         applyMode();
     }
 
@@ -334,40 +449,35 @@ public class BridgeImeService extends InputMethodService {
 
     private void paintShift() {
         if (shiftKey == null) return;
-        shiftKey.setText(shifted ? "⇪" : "⇧");
+        shiftKey.setText(shiftLock ? "\u21ea" : (shifted ? "\u21e7" : "\u21e7"));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(shifted ? 0xFF3A4048 : KEY_BG_DARK);
+        bg.setColor(shifted ? (shiftLock ? 0xFF4A5A8A : 0xFF3A4048) : KEY_BG_DARK);
         bg.setCornerRadius(dp(8));
         shiftKey.setBackground(bg);
         if (!symbols) {
             LinearLayout area = (LinearLayout) kbRoot.getChildAt(kbRoot.getChildCount() - 1);
             LinearLayout grid = (LinearLayout) area.getChildAt(0);
-            String[] rows = {"qwertyuiop", "asdfghjkl", "zxcvbnm"};
-            // row 0: children 0..9 are letters; row 1: 0..8; row 2: 1..8 (shift at 0, ⌫ at 9)
             int[][] ranges = {{0, 10}, {0, 9}, {1, 9}};
             for (int ri = 0; ri < 3; ri++) {
                 LinearLayout row = (LinearLayout) grid.getChildAt(ri);
-                String labels = rows[ri];
-                int li = 0;
-                for (int ci = ranges[ri][0]; ci < ranges[ri][1]; ci++) {
-                    TextView t = (TextView) row.getChildAt(ci);
-                    String base = String.valueOf(labels.charAt(li++));
-                    t.setText(shifted ? base.toUpperCase() : base);
+                for (int ci = ranges[ri][0], li = 0; ci < ranges[ri][1]; ci++, li++) {
+                    FrameLayout w = (FrameLayout) row.getChildAt(ci);
+                    TextView m = (TextView) w.getTag();
+                    String base = String.valueOf(QWERTY[ri][li].charAt(0));
+                    m.setText(shifted ? base.toUpperCase() : base);
                 }
             }
         }
-        if (shifted) {
-            main.postDelayed(() -> { if (shifted) { shifted = false; paintShift(); } }, 1200);
+        if (shifted && !shiftLock) {
+            main.postDelayed(() -> { if (shifted && !shiftLock) { shifted = false; paintShift(); } }, 1200);
         }
     }
 
     // ---- bridge protocol (unchanged semantics) ----
 
     private void onKey(char c) {
-        boolean upper = shifted && !symbols && Character.isLetter(c);
-        char out = upper ? Character.toUpperCase(c) : c;
-        if (shifted) { shifted = false; paintShift(); }
         if (c == 0xff0d) { enter(); return; }
+        char out = c;
         if (!asciiMode && engineUp) {
             long k = (c == 0xff08) ? 0xff08 : out;
             send(jq("op", "key", "key", k), () -> fallback(out));
@@ -439,6 +549,20 @@ public class BridgeImeService extends InputMethodService {
             String label = (i + 1) + " " + t[i] + (c[i].isEmpty() ? "" : "  " + c[i]);
             candRow.addView(cand(label, i));
         }
+        if (RimeBridge.page > 0) candRow.addView(pageBtn("\u25c2", false));
+        if (!RimeBridge.lastPage) candRow.addView(pageBtn("\u25b8", true));
+    }
+
+    private TextView pageBtn(String arrow, final boolean next) {
+        TextView tv = new TextView(this);
+        tv.setText(arrow);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        tv.setTextColor(KEY_FG_DIM);
+        tv.setGravity(Gravity.CENTER);
+        int p = dp(12);
+        tv.setPadding(p, p / 2, p, p / 2);
+        tv.setOnClickListener(v -> send(jq("op", "page", "dir", next ? 1 : 0), () -> {}));
+        return tv;
     }
 
     private TextView cand(String label, int idx) {
