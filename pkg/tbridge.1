@@ -6,10 +6,30 @@ tbridge \- TermuxBridge 命令行 (Termux:API 风格)
 .I command
 .RI [ args ]
 .SH DESCRIPTION
-通过 127.0.0.1:8021 上的 TermuxBridge Android 应用调用系统能力:
+通过抽象 unix socket lll.bridge.termux 上的 TermuxBridge Android 应用调用系统能力:
 通知、剪贴板、传感器、定位、TTS/STT、截图、模拟触控、UI 树导出。
 .SH ENVIRONMENT
-TBRIDGE_PORT (默认 8021), TBRIDGE_HOST, TBRIDGE_TOKEN, TBRIDGE_TIMEOUT.
+TBRIDGE_TOKEN, TBRIDGE_TIMEOUT.
+.SH COMMANDS
+.TP
+.B tbridge-overlay
+show, update, animate, hide, events (--since/--wait), values, list, bounds,
+tree, stats, perm, demo.
+.TP
+.B tbridge-acc
+Accessibility event mode (none, window, content, both) and counters.
+.TP
+.B tbridge-panic
+status, stop \- cut overlay, accessibility, listener and service at once.
+.TP
+.B tbridge-notif
+status, recent, clear, perm, dismiss, cancel, channels, channel.
+.TP
+.B tbridge-ime
+status, commit, show, hide, pick, rime (passthrough to the Termux rime daemon).
+.TP
+.B tbridge-text
+Write the focused field; -g reads it, -d dumps diagnostics.
 .SH EXAMPLES
 .nf
 tbridge-toast "构建完成"

@@ -40,7 +40,7 @@ public final class Dispatcher {
         JSONObject r;
         try {
             JSONObject p = new JSONObject(json);
-            // token 校验(广播通道必须, TCP 可选)
+            // token: if set, required on every channel (socket peers are additionally uid-gated)
             String tk = Prefs.token(ctx);
             String got = p.optString("token", "");
             if (!tk.isEmpty() && !tk.equals(got)) {
@@ -66,7 +66,7 @@ public final class Dispatcher {
             if (fk != null && !Prefs.enabled(ctx, fk)) return err("feature disabled: " + fk);
             // 广播通道只允许无 UI 依赖的命令
             if (fromBroadcast && UI_CMDS.contains(cmd))
-                return err("cmd '" + cmd + "' requires TCP channel (needs UI/poll), use tcp");
+                return err("cmd '" + cmd + "' needs a polling channel (socket or UI); broadcast is one-shot");
             return c.run(ctx, p);
         } catch (Exception e) {
             return err(e.getClass().getSimpleName() + ": " + e.getMessage());

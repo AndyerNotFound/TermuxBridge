@@ -11,8 +11,8 @@ android {
         minSdk 28
         // keep in sync with AndroidManifest.xml (single source of truth there)
         targetSdk 36
-        versionCode 21
-        versionName "1.10.1"
+        versionCode 22
+        versionName "2.0.0"
     }
 
     signingConfigs {
@@ -30,7 +30,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
-            signingConfig signingConfigs.release
+            // TBRIDGE_UNSIGNED=1 builds an unsigned APK (remote builder without the keystore);
+            // sign locally afterwards with apksigner and ~/.android/bridge.keystore.
+            signingConfig System.getenv("TBRIDGE_UNSIGNED") != null ? null : signingConfigs.release
         }
     }
 

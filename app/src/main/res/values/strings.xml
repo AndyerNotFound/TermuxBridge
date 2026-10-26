@@ -2,7 +2,7 @@
 <resources>
     <!-- app / system-facing component labels -->
     <string name="app_name">TermuxBridge</string>
-    <string name="acc_desc">TermuxBridge accessibility service: screenshots, injected taps/swipes, UI tree dumps. Invoked only from local Termux via 127.0.0.1; no network access.</string>
+    <string name="acc_desc">TermuxBridge accessibility service: screenshots, injected taps/swipes, UI tree dumps. Invoked only by peer-approved local processes (uid gate); no network access.</string>
     <string name="svc_label_a11y">TermuxBridge accessibility</string>
     <string name="svc_label_notif">TermuxBridge notification listener</string>
     <string name="widget_label">TermuxBridge status</string>
@@ -13,11 +13,7 @@
     <string name="notif_service_title">TermuxBridge running</string>
 
     <!-- main screen -->
-    <string name="main_hint_port">Port</string>
-    <string name="main_btn_save_port">Save port</string>
-    <string name="main_toast_port_range">Port must be 1024-65535</string>
-    <string name="main_toast_port_saved">Port saved: %1$s, restart the service to apply</string>
-    <string name="main_hint_token">Access token (empty = no auth)</string>
+    <string name="main_hint_token">Access token (empty = off; peers are always uid-gated)</string>
     <string name="main_btn_save_token">Save token</string>
     <string name="main_toast_token_saved">Token saved</string>
     <string name="main_btn_request_perms">Request permissions</string>

@@ -1,11 +1,9 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # tbridge — TermuxBridge CLI (Termux:API 风格多调用程序)
-# 通过本机 127.0.0.1 的 TermuxBridge APP 服务调用 Android 能力。
+# 经抽象 unix socket (lll.bridge.termux) 调用 TermuxBridge APP (v2.0: TCP 已移除)。
 # 每个命令 = 本程序的符号链接名, 如 tbridge-toast -> tbridge
 
 set -u
-PORT="${TBRIDGE_PORT:-8021}"
-HOST="${TBRIDGE_HOST:-127.0.0.1}"
 TOKEN="${TBRIDGE_TOKEN:-}"
 TIMEOUT="${TBRIDGE_TIMEOUT:-60}"
 RAW=0
@@ -23,9 +21,22 @@ set -- ${args[@]+"${args[@]}"}
 die() { printf 'tbridge: %s\n' "$*" >&2; exit 1; }
 
 send() {
-  local payload="$1" resp
-  resp=$(printf '%s\n' "$payload" | nc -w "$TIMEOUT" "$HOST" "$PORT" 2>/dev/null)
-  [ -n "$resp" ] || die "无响应 — 检查 APP 是否『启动服务』, 端口=$PORT, token 是否匹配"
+  resp=$(TBRIDGE_TIMEOUT="${TBRIDGE_TIMEOUT:-60}" python3 - "$1" <<'TBSHIM'
+import os, socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(float(os.environ["TBRIDGE_TIMEOUT"]))
+s.connect("\0lll.bridge.termux")
+s.sendall((sys.argv[1] + "\n").encode())
+buf = b""
+while not buf.endswith(b"\n"):
+    c = s.recv(65536)
+    if not c:
+        break
+    buf += c
+sys.stdout.write(buf.decode(errors="replace"))
+TBSHIM
+  )
+  [ -n "$resp" ] || die "无响应 — 检查 APP 是否『启动服务』, token 是否匹配"
   printf '%s\n' "$resp"
 }
 
@@ -45,6 +56,14 @@ out() {
     cat
   else
     jq -r "$filter"
+  fi
+}
+
+withtok() {  # 读 stdin 的 JSON 对象, 注入 token(若已设置)
+  if [ -n "$TOKEN" ] && command -v jq >/dev/null 2>&1; then
+    jq -c --arg t "$TOKEN" '. + {token:$t}'
+  else
+    cat
   fi
 }
 
@@ -71,6 +90,7 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
   剪贴板
     tbridge-clipboard-get
     tbridge-clipboard-set [TEXT]      (无参数读 stdin)
+    tbridge-clipboard-catch           (拉起透明窗口抓一次, 再回读)
 
   状态
     tbridge-battery-status
@@ -88,7 +108,7 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
 
   交互
     tbridge-share [TEXT|-]            (- 读 stdin)
-    tbridge-open URL
+    tbridge-open [-w 包名] URL
     tbridge-dial NUM
     tbridge-sms-send NUM [TEXT]
 
@@ -97,20 +117,24 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
     tbridge-tap X Y
     tbridge-swipe X1 Y1 X2 Y2 [MS]
     tbridge-ui [DEPTH]
-    tbridge-overlay show|demo|hide|events|values|list|bounds|perm
+    tbridge-a11y                      # 无障碍服务是否就绪
+    tbridge-overlay show|update|animate|hide|events|values|list|bounds|tree|stats|perm|demo
 
   电源
     tbridge-power status|request|settings
 
   通知/外观/应用
     tbridge-notif status|recent [N]|clear|perm|dismiss KEY
+    tbridge-notif cancel ID|all | channels
+    tbridge-notif channel ID [NAME] [-i 重要性0-5] [-d 描述] [--sound on|off] [--vibrate on|off]
     tbridge-theme colors|tokens|blur
     tbridge-app list [关键词]|launch PKG [URI]|info PKG|settings [PKG]
     tbridge-widget update|pin|info
 
   输入/内容
     tbridge-ime status|commit TEXT|show|hide|pick
-    tbridge-text TEXT | tbridge-text -g     # 直接写/读焦点输入框(不依赖输入法)
+    tbridge-ime rime [OP] [key=v ...]  # 透传 Termux 侧 rime daemon
+    tbridge-text TEXT | -g | -d            # 写/读焦点输入框, -d 导出诊断
     tbridge-media [image|video] [N]
     tbridge-role list|request dialer|sms|home
 
@@ -118,11 +142,16 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
     tbridge-record SECONDS [FILE]
     tbridge-stt [语言]
 
+  无障碍/刹车/协议
+    tbridge-acc [status|stats|none|window|content|both]
+    tbridge-panic status|stop
+    tbridge-proto
+
   服务
     tbridge-service start|stop|status
     tbridge-ping
 
-全局: --json 输出原始 JSON; 环境变量 TBRIDGE_PORT/TBRIDGE_HOST/TBRIDGE_TOKEN/TBRIDGE_TIMEOUT
+全局: --json 输出原始 JSON; 环境变量 TBRIDGE_TOKEN/TBRIDGE_TIMEOUT
 EOF
 }
 
@@ -184,11 +213,11 @@ cmd_clipboard_set() {
 }
 
 cmd_text() {
-  if [ "${1:-}" = "-g" ]; then
-    send "$(printf '{%s"cmd":"text.get"}' "$(tok)")" | okcheck | out '.text'
-  else
-    send "$(printf '{%s"cmd":"text.set","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck | out '.len'
-  fi
+  case "${1:-}" in
+    -g|--get)   send "$(printf '{%s"cmd":"text.get"}' "$(tok)")" | okcheck | out '.text' ;;
+    -d|--debug) send "$(printf '{%s"cmd":"text.debug"}' "$(tok)")" | okcheck | out '.diag' ;;
+    *)          send "$(printf '{%s"cmd":"text.set","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck | out '.len' ;;
+  esac
 }
 
 cmd_ime() {
@@ -198,7 +227,20 @@ cmd_ime() {
     commit) send "$(printf '{%s"cmd":"ime.commit","text":%s}' "$(tok)" "$(jstr "$*")")" | okcheck | out '.committed' ;;
     show|hide) send "$(printf '{%s"cmd":"ime.%s"}' "$(tok)" "$sub")" | okcheck >/dev/null; printf 'ok\n' ;;
     pick)   send "$(printf '{%s"cmd":"ime.pick"}' "$(tok)")" | okcheck >/dev/null; printf 'ok\n' ;;
-    *) die "用法: tbridge-ime status|commit TEXT|show|hide|pick" ;;
+    rime)
+      local op="${1:-status}"; [ $# -gt 0 ] && shift
+      local extra="" k v jv
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          *=*)
+            k="${1%%=*}"; v="${1#*=}"
+            case "$v" in ''|*[!0-9]*) jv="$(jstr "$v")" ;; *) jv="$v" ;; esac
+            extra="$extra,\"$k\":$jv" ;;
+        esac
+        shift
+      done
+      send "$(printf '{%s"cmd":"ime.rime","op":"%s"%s}' "$(tok)" "$op" "$extra")" | okcheck | out . ;;
+    *) die "用法: tbridge-ime status|commit TEXT|show|hide|pick|rime [OP] [key=v ...]" ;;
   esac
 }
 
@@ -223,8 +265,41 @@ cmd_notif() {
     recent) send "$(printf '{%s"cmd":"notif.recent","limit":%s}' "$(tok)" "${1:-10}")" | okcheck | out '.notifications[]|"\(.pkg) | \(.title) | \(.text)"' ;;
     clear)  send "$(printf '{%s"cmd":"notif.clear"}' "$(tok)")" | okcheck >/dev/null; printf 'cleared\n' ;;
     perm)   send "$(printf '{%s"cmd":"notif.perm"}' "$(tok)")" | okcheck >/dev/null; printf 'ok\n' ;;
-    dismiss) send "$(printf '{%s"cmd":"notif.dismiss","key":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null; printf 'ok\n' ;;
-    *) die "用法: tbridge-notif status|recent [N]|clear|perm|dismiss KEY" ;;
+    dismiss) send "$(printf '{%s"cmd":"notif.dismiss","key":%s}' "$(tok)" "$(jstr "${1:-}")")" | okcheck >/dev/null; printf 'ok\n' ;;
+    cancel)
+      case "${1:-}" in
+        all|-a|--all) send "$(printf '{%s"cmd":"notify.cancel","all":true}' "$(tok)")" | okcheck >/dev/null; printf 'cancelled: all\n' ;;
+        "") die "用法: tbridge-notif cancel ID|all" ;;
+        *) send "$(printf '{%s"cmd":"notify.cancel","id":%s}' "$(tok)" "$1")" | okcheck >/dev/null; printf 'cancelled: %s\n' "$1" ;;
+      esac ;;
+    channels) send "$(printf '{%s"cmd":"notify.channels"}' "$(tok)")" | okcheck | out '.channels[]|"\(.id)\t\(.name)\timportance=\(.importance)"' ;;
+    channel)
+      local cid="${1:-}"; [ -n "$cid" ] || die "用法: tbridge-notif channel ID [NAME] [-i 0-5] [-d 描述] [--sound on|off] [--vibrate on|off]"
+      shift
+      local cname="" cimp="" cdesc="" csnd="" cvib=""
+      case "${1:-}" in ""|-*) ;; *) cname="$1"; shift ;; esac
+      while [ $# -gt 0 ]; do case "$1" in
+        -i|--importance)  cimp="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+        -d|--description) cdesc="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+        --sound)          csnd="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+        --vibrate)        cvib="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+        *) shift ;;
+      esac; done
+      local ctmp="${TMPDIR:-$PREFIX/tmp}"; mkdir -p "$ctmp"
+      TB_ID="$cid" TB_NAME="$cname" TB_IMP="$cimp" TB_DESC="$cdesc" TB_SND="$csnd" TB_VIB="$cvib" \
+        python3 - <<'PYEOF' | withtok > "$ctmp/tb_ch.json"
+import json, os
+d = {"cmd": "notify.channel", "id": os.environ["TB_ID"]}
+if os.environ.get("TB_NAME"): d["name"] = os.environ["TB_NAME"]
+if os.environ.get("TB_IMP"):  d["importance"] = int(os.environ["TB_IMP"])
+if os.environ.get("TB_DESC"): d["description"] = os.environ["TB_DESC"]
+for k, e in (("sound", "TB_SND"), ("vibration", "TB_VIB")):
+    v = (os.environ.get(e) or "").lower()
+    if v: d[k] = v in ("on", "true", "1", "yes")
+print(json.dumps(d, ensure_ascii=False))
+PYEOF
+      send "$(cat "$ctmp/tb_ch.json")" | okcheck | out . ;;
+    *) die "用法: tbridge-notif status|recent [N]|clear|perm|dismiss KEY|cancel ID|all|channels|channel ID [NAME] [-i 0-5]" ;;
   esac
 }
 
@@ -334,9 +409,17 @@ cmd_share() {
 }
 
 cmd_open() {
-  [ -n "${1:-}" ] || die "缺 URL"
-  send "$(printf '{%s"cmd":"open","url":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null
-  printf 'ok\n'
+  local opkg=""
+  case "${1:-}" in
+    -w|--with) opkg="${2:-}"; shift; [ $# -gt 0 ] && shift ;;
+  esac
+  [ -n "${1:-}" ] || die "用法: tbridge-open [-w 包名] URL"
+  if [ -n "$opkg" ]; then
+    send "$(printf '{%s"cmd":"open.with","uri":%s,"pkg":%s}' "$(tok)" "$(jstr "$1")" "$(jstr "$opkg")")" | okcheck | out '.pkg'
+  else
+    send "$(printf '{%s"cmd":"open","url":%s}' "$(tok)" "$(jstr "$1")")" | okcheck >/dev/null
+    printf 'ok\n'
+  fi
 }
 
 cmd_dial() {
@@ -409,13 +492,61 @@ PYEOF
       ;;
     tree)   send "$(printf '{%s"cmd":"overlay.tree","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.nodes[]|"\(.depth) \(.cls) id=\(.id) \(.x),\(.y) \(.w)x\(.h)"' ;;
     hide|close) send "$(printf '{%s"cmd":"overlay.hide","id":"%s"}' "$(tok)" "${1:-all}")" | okcheck >/dev/null; printf 'hidden\n' ;;
-    events) send "$(printf '{%s"cmd":"overlay.events","since":%s,"clear":%s}' "$(tok)" "${1:-0}" "${2:-false}")" | okcheck | out '.events' ;;
+    events)
+      local since=0 clear=false wait=0
+      while [ $# -gt 0 ]; do case "$1" in
+        --since) since="${2:-0}"; shift; [ $# -gt 0 ] && shift ;;
+        --wait)  wait="${2:-0}"; shift; [ $# -gt 0 ] && shift ;;
+        --clear) clear=true; shift ;;
+        --keep)  clear=false; shift ;;
+        *) since="$1"; [ -n "${2:-}" ] && clear="$2"; shift; [ $# -gt 0 ] && shift ;;
+      esac; done
+      send "$(printf '{%s"cmd":"overlay.events","since":%s,"clear":%s,"wait":%s}' "$(tok)" "$since" "$clear" "$wait")" | okcheck | out '.events' ;;
+    stats) send "$(printf '{%s"cmd":"overlay.stats"}' "$(tok)")" | okcheck | out . ;;
+    animate)
+      local aid="${1:-}"; [ -n "$aid" ] || die "用法: tbridge-overlay animate ID JSON|FILE [MS] [ease]"
+      shift; local src="${1:-}"; [ $# -gt 0 ] && shift
+      local ams="${1:-}"; [ $# -gt 0 ] && shift
+      local aease="${1:-}"
+      local atmp="${TMPDIR:-$PREFIX/tmp}"; mkdir -p "$atmp"
+      local abody
+      if [ -z "$src" ] || [ "$src" = "-" ]; then abody="$(cat)"
+      elif [ -f "$src" ]; then abody="$(cat "$src")"
+      else abody="$src"; fi
+      printf '%s' "$abody" > "$atmp/tb_anim.json"
+      TB_ID="$aid" TB_MS="$ams" TB_EASE="$aease" python3 - "$atmp/tb_anim.json" <<'PYEOF'
+import json, os, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+if not isinstance(d, dict):
+    d = {}
+if "to" not in d:
+    inner = dict(d)
+    d = {}
+    for k in ("ms", "ease"):
+        if k in inner:
+            d[k] = inner.pop(k)
+    d["to"] = inner
+d["cmd"] = "overlay.animate"
+d["id"] = os.environ["TB_ID"]
+ms = os.environ.get("TB_MS", "")
+if ms:
+    d["ms"] = int(float(ms))
+if os.environ.get("TB_EASE"):
+    d["ease"] = os.environ["TB_EASE"]
+open(p, "w").write(json.dumps(d, ensure_ascii=False))
+PYEOF
+      send "$(cat "$atmp/tb_anim.json" | withtok)" | okcheck | out '.started'
+      ;;
     values) send "$(printf '{%s"cmd":"overlay.values","id":"%s"}' "$(tok)" "${1:-}")" | okcheck | out '.values' ;;
     list)   send "$(printf '{%s"cmd":"overlay.list"}' "$(tok)")" | okcheck | out '.windows' ;;
     bounds) send "$(printf '{%s"cmd":"overlay.bounds"}' "$(tok)")" | okcheck | out '.windows[]|"\(.id) x=\(.x) y=\(.y) w=\(.w) h=\(.h)"' ;;
     perm)   send "$(printf '{%s"cmd":"overlay.perm","request":true}' "$(tok)")" | okcheck | out '.granted' ;;
     demo)   cmd_overlay_show_demo ;;
-    *) die "用法: tbridge-overlay show|update|hide|events [SINCE] [CLEAR]|values|list|bounds|tree|perm|demo" ;;
+    *) die "用法: tbridge-overlay show|update|animate ID JSON|FILE [MS]|hide|events [--since N] [--wait SEC] [--clear]|values|list|bounds|tree|stats|perm|demo" ;;
   esac
 }
 
@@ -466,7 +597,7 @@ cmd_stt() {
   die "语音识别超时"
 }
 
-alive() { printf '{"cmd":"ping"}' | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1; }
+alive() { local TBRIDGE_TIMEOUT=2; send '{"cmd":"ping"}' >/dev/null 2>&1; }
 
 cmd_service() {
   local rish="$HOME/Shizuku/rish"
@@ -495,6 +626,44 @@ cmd_service() {
 }
 
 cmd_ping() { send "$(printf '{%s"cmd":"ping"}' "$(tok)")" | okcheck | out . ; }
+
+cmd_acc() {
+  local sub="${1:-status}"; [ $# -gt 0 ] && shift
+  case "$sub" in
+    status) send "$(printf '{%s"cmd":"acc.events"}' "$(tok)")" | okcheck | out . ;;
+    stats)  send "$(printf '{%s"cmd":"acc.stats"}' "$(tok)")" | okcheck | out . ;;
+    none|window|content|both)
+      send "$(printf '{%s"cmd":"acc.events","mode":"%s"}' "$(tok)" "$sub")" | okcheck | out . ;;
+    *) die "用法: tbridge-acc [status|stats|none|window|content|both]" ;;
+  esac
+}
+
+cmd_panic() {
+  case "${1:-status}" in
+    status) send "$(printf '{%s"cmd":"panic.status"}' "$(tok)")" | okcheck | out . ;;
+    stop)   send "$(printf '{%s"cmd":"panic.stop"}' "$(tok)")" | okcheck | out . ;;
+    *) die "用法: tbridge-panic status|stop" ;;
+  esac
+}
+
+cmd_proto() { send "$(printf '{%s"cmd":"proto"}' "$(tok)")" | okcheck | out '.commands[]' ; }
+
+cmd_a11y() { send "$(printf '{%s"cmd":"a11y"}' "$(tok)")" | okcheck | out '.enabled' ; }
+
+cmd_clipboard_catch() {
+  # 系统只允许有焦点时读剪贴板: 拉起透明 Activity 抓一次, 再回读缓存
+  send "$(printf '{%s"cmd":"clip.catch"}' "$(tok)")" | okcheck >/dev/null
+  local i body
+  for i in $(seq 1 20); do
+    sleep 0.3
+    body=$(send "$(printf '{%s"cmd":"clip.read"}' "$(tok)")" 2>/dev/null) || true
+    if printf '%s' "$body" | jq -e '.ok==true' >/dev/null 2>&1; then
+      printf '%s' "$body" | out '.text'
+      return 0
+    fi
+  done
+  die "剪贴板读取超时 (无焦点或系统拦截)"
+}
 
 # ---- 分发: 先看调用名(符号链接), 再看第一个参数 ----
 me=$(basename "$0")
@@ -546,6 +715,11 @@ case "$sub" in
   stt) cmd_stt "$@" ;;
   service) cmd_service "$@" ;;
   ping) cmd_ping "$@" ;;
+  acc) cmd_acc "$@" ;;
+  panic) cmd_panic "$@" ;;
+  proto) cmd_proto "$@" ;;
+  a11y) cmd_a11y "$@" ;;
+  clipboard-catch) cmd_clipboard_catch "$@" ;;
   # --- 短名别名(兼容 tb 风格) ---
   battery) cmd_battery_status "$@" ;;
   net) cmd_net_status "$@" ;;

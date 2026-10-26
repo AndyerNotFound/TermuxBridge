@@ -76,8 +76,15 @@ final class CmdsCore {
             return Dispatcher.ok();
         });
         r.put("clip.catch", (ctx, p) -> {
-            // 广播不能启动 activity, 交由 TCP 通道处理时提示
-            return Dispatcher.err("clip.catch must be invoked via TCP poll flow (see ClipCatchActivity)");
+            // 系统只允许有焦点的应用读剪贴板: 拉起透明 Activity 抓一次, 结果进 30 s 缓存
+            try {
+                Intent ci = new Intent(ctx, ClipCatchActivity.class);
+                ci.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(ci);
+                return Dispatcher.ok().put("pending", true);
+            } catch (Exception e) {
+                return Dispatcher.err("cannot start clip capture: " + e);
+            }
         });
 
         // ===== 信息 =====

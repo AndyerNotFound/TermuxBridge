@@ -3,26 +3,28 @@ package lll.bridge.termux;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Client for the Termux-side rime-daemon (127.0.0.1:8023, one line-JSON
- * request -> one line-JSON response, same framing as the main bridge).
+ * Client for the Termux-side rime-daemon (abstract unix socket
+ * "lll.bridge.termux.rime", one line-JSON request -> one line-JSON response,
+ * same framing as the main bridge).
  *
  * The app cannot link librime (Termux libs live outside the app sandbox),
  * so the engine runs as a native daemon in Termux and the IME talks to it
- * over loopback. Every mutating op returns a full context snapshot;
- * {@link #apply} copies it into volatile fields the IME reads on the main
- * thread. All methods block - call from a background thread only.
+ * over the local socket. Every mutating op returns a full context snapshot;
+ * apply() copies it into volatile fields the IME reads on the main thread.
+ * All methods block - call from a background thread only.
  */
 public final class RimeBridge {
-    public static final int PORT = 8023;
+    public static final String SOCKET_NAME = "lll.bridge.termux.rime";
     private static final int CONNECT_MS = 400;
     private static final int READ_MS = 1200;
 
@@ -42,9 +44,10 @@ public final class RimeBridge {
     private RimeBridge() {}
 
     public static JSONObject request(JSONObject req) throws Exception {
-        Socket s = new Socket();
+        LocalSocket s = new LocalSocket();
         try {
-            s.connect(new InetSocketAddress("127.0.0.1", PORT), CONNECT_MS);
+            s.connect(new LocalSocketAddress(SOCKET_NAME,
+                    LocalSocketAddress.Namespace.ABSTRACT), CONNECT_MS);
             s.setSoTimeout(READ_MS);
             OutputStream os = s.getOutputStream();
             os.write((req.toString() + "\n").getBytes(StandardCharsets.UTF_8));

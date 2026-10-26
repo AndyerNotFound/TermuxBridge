@@ -1,6 +1,6 @@
 # rime-daemon (Termux side)
 
-The IME in the app talks JSON over 127.0.0.1:8023 to this daemon, which owns
+The IME in the app talks JSON over the abstract unix socket lll.bridge.termux.rime to this daemon, which owns
 librime + the wanxiang dictionary (the app sandbox cannot link Termux libs).
 
 ## Install (inside Termux)
@@ -15,6 +15,6 @@ librime + the wanxiang dictionary (the app sandbox cannot link Termux libs).
     tbridge-rime deploy               # precompile (or let the daemon do it on first start)
     tbridge-rime start
 
-Verify: echo '{"op":"key","key":110}' | nc -w 5 127.0.0.1 8023
+Verify: python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("\0lll.bridge.termux.rime");s.sendall(b'{"op":"key","key":110}\n');print(s.recv(4096).decode())'
 
 Optional: register in Termux:Boot for start-on-boot.

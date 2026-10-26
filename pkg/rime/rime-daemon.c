@@ -1,6 +1,8 @@
 /*
  * rime-daemon: Termux-side Rime engine bridge for TermuxBridge IME.
- * Listens on 127.0.0.1:8023, one line-JSON request -> one line-JSON response.
+ * Listens on the abstract unix socket "lll.bridge.termux.rime"; one line-JSON
+ * request -> one line-JSON response. Peers are uid-gated (bridge app, Termux,
+ * shell, root) - same policy as the main bridge.
  * The keyboard never links librime (app is sandboxed from Termux libs);
  * this process owns the engine, session and dictionaries.
  *
@@ -26,11 +28,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/un.h>
+#include <stddef.h>
 
-#define PORT 8023
+#define SOCKNAME "lll.bridge.termux.rime"
 #define REQMAX 65536
 #define RSPMAX (2 * 1024 * 1024)
 #define CANDMAX 48
@@ -199,22 +201,45 @@ int main(void) {
     session = rime->create_session();
     if (!session) { fprintf(stderr, "create_session failed\n"); return 1; }
 
-    int srv = socket(AF_INET, SOCK_STREAM, 0);
-    int one = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
-    struct sockaddr_in addr;
+    /* resolve the bridge app's uid once; unknown uid -> nobody may connect */
+    int gate_uid = -1;
+    {
+        FILE* fp = popen("pm list packages -U lll.bridge.termux 2>/dev/null", "r");
+        if (fp) {
+            char ln[256];
+            while (fgets(ln, sizeof ln, fp)) {
+                char* u = strstr(ln, "uid:");
+                if (u) { gate_uid = atoi(u + 4); break; }
+            }
+            pclose(fp);
+        }
+    }
+    if (gate_uid <= 0) { fprintf(stderr, "rime-daemon: cannot resolve bridge uid; refusing to listen\n"); return 1; }
+
+    int srv = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un addr;
     memset(&addr, 0, sizeof addr);
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons(PORT);
-    if (bind(srv, (struct sockaddr*)&addr, sizeof addr) != 0) { perror("bind"); return 1; }
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0';                       /* abstract namespace */
+    size_t nlen = strlen(SOCKNAME);                 /* no trailing NUL: name length is part of the address */
+    memcpy(addr.sun_path + 1, SOCKNAME, nlen);
+    socklen_t alen = offsetof(struct sockaddr_un, sun_path) + 1 + nlen;
+    if (bind(srv, (struct sockaddr*)&addr, alen) != 0) { perror("bind"); return 1; }
     listen(srv, 4);
-    fprintf(stderr, "rime-daemon: listening on 127.0.0.1:%d user=%s\n", PORT, ud);
+    fprintf(stderr, "rime-daemon: listening on unix:@%s user=%s gate_uid=%d\n", SOCKNAME, ud, gate_uid);
 
     static char req[REQMAX];
     for (;;) {
         int fd = accept(srv, NULL, NULL);
         if (fd < 0) continue;
+        struct ucred cred;
+        socklen_t clen = sizeof cred;
+        int uid_ok = 0;
+        if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred, &clen) == 0) {
+            if (cred.uid == 0 || cred.uid == 2000
+                || cred.uid == (uid_t)gate_uid || cred.uid == getuid()) uid_ok = 1;
+        }
+        if (!uid_ok) { close(fd); continue; }
         size_t n = 0;
         while (n + 1 < REQMAX) {
             char c;

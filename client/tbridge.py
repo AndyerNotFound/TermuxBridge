@@ -1,7 +1,7 @@
 """TermuxBridge 客户端库(纯标准库, 无第三方依赖)。
 
     import tbridge
-    b = tbridge.Bridge()                 # 默认 127.0.0.1:8021
+    b = tbridge.Bridge()                 # 默认抽象 unix socket lll.bridge.termux
     b.toast("构建完成")
     print(b.battery()["level"])
     open("s.png","wb").write(b.screenshot())
@@ -16,8 +16,7 @@ import socket
 
 __all__ = ["Bridge", "BridgeError"]
 
-DEFAULT_PORT = int(os.environ.get("TBRIDGE_PORT", "8021"))
-DEFAULT_HOST = os.environ.get("TBRIDGE_HOST", "127.0.0.1")
+DEFAULT_SOCK = "\0" + os.environ.get("TBRIDGE_SOCK", "lll.bridge.termux")
 DEFAULT_TOKEN = os.environ.get("TBRIDGE_TOKEN", "")
 
 
@@ -26,9 +25,8 @@ class BridgeError(RuntimeError):
 
 
 class Bridge:
-    def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT,
-                 token=DEFAULT_TOKEN, timeout=30.0):
-        self.host, self.port, self.token, self.timeout = host, port, token, timeout
+    def __init__(self, sock=DEFAULT_SOCK, token=DEFAULT_TOKEN, timeout=30.0):
+        self.sock, self.token, self.timeout = sock, token, timeout
 
     # ---------- 底层 ----------
     def call(self, cmd, **params):
@@ -38,17 +36,19 @@ class Bridge:
         req.update(params)
         payload = (json.dumps(req, ensure_ascii=False) + "\n").encode()
         try:
-            with socket.create_connection((self.host, self.port), self.timeout) as s:
-                s.settimeout(self.timeout)
-                s.sendall(payload)
+            sk = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            with sk:
+                sk.settimeout(self.timeout)
+                sk.connect(self.sock)
+                sk.sendall(payload)
                 buf = b""
                 while not buf.endswith(b"\n"):
-                    chunk = s.recv(65536)
+                    chunk = sk.recv(65536)
                     if not chunk:
                         break
                     buf += chunk
         except OSError as e:
-            raise BridgeError(f"连不上 {self.host}:{self.port} — {e}") from e
+            raise BridgeError(f"连不上 {self.sock!r} — {e}") from e
         if not buf.strip():
             raise BridgeError("空响应(服务未运行? 端口/token 不对?)")
         resp = json.loads(buf.decode())

@@ -7,24 +7,35 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.os.Build;
 import android.os.IBinder;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
 
 /**
- * 前台服务: 本地 TCP JSON 服务。一连接一请求: 一行 JSON 入, 一行 JSON 出。
- * 常驻服务避免每命令冷启动; 仅监听 127.0.0.1。 */
+ * Foreground service: local JSON server on an abstract-namespace unix socket.
+ * One connection per request: one JSON line in, one JSON line out.
+ *
+ * v2.0.0 breaking change: the old 127.0.0.1:8021 TCP listener is gone.
+ * Same wire format, new transport - clients must speak AF_UNIX
+ * (Node path "\0lll.bridge.termux", Android LocalSocket, Python "\0"+name).
+ *
+ * Abstract socket names are reachable by every app on the device, so peers
+ * are gated by uid (the local-socket analogue of the old port+token pair):
+ * the app itself, Termux, shell (2000) and root (0).
+ */
 public class BridgeService extends Service {
     public static final String ACTION_START = "lll.bridge.START";
     public static final String ACTION_STOP = "lll.bridge.STOP";
     public static final String ACTION_UPGRADE_FGS = "lll.bridge.UPGRADE_FGS";
+    /** abstract unix socket name (leading NUL implied by the namespace) */
+    public static final String SOCKET_NAME = "lll.bridge.termux";
+    private static volatile int termuxUid = -1;
     private ServerThread thread;
 
     @Override
@@ -46,7 +57,7 @@ public class BridgeService extends Service {
         Notification n = new Notification.Builder(this, ch)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle(getString(R.string.notif_service_title))
-                .setContentText("127.0.0.1:" + Prefs.port(this))
+                .setContentText("unix:@" + SOCKET_NAME)
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();
@@ -71,7 +82,6 @@ public class BridgeService extends Service {
             return START_NOT_STICKY;
         }
         if (ACTION_UPGRADE_FGS.equals(a) && Build.VERSION.SDK_INT >= 34) {
-            // MediaProjection 前必须: 服务以 mediaProjection 类型运行(截图授权已由 Activity 取得)
             try {
                 Notification n = buildNotification();
                 startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
@@ -93,36 +103,60 @@ public class BridgeService extends Service {
     public IBinder onBind(Intent i) { return null; }
 
     private class ServerThread extends Thread {
-        private volatile ServerSocket server;
-        private volatile int boundPort;
+        private volatile LocalServerSocket server;
 
         @Override
         public void run() {
             try {
-                int port = Prefs.port(BridgeService.this);
-                server = new ServerSocket();
-                server.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
-                boundPort = port;
+                server = new LocalServerSocket(SOCKET_NAME);   // abstract namespace
                 while (true) {
                     if (Prefs.panicked(BridgeService.this)) {   // brake: no new connections
                         try { Thread.sleep(500); } catch (InterruptedException ie) { break; }
                         continue;
                     }
-                    Socket s = server.accept();
+                    LocalSocket s = server.accept();
+                    if (!allowed(s)) {
+                        android.util.Log.w("TBridge", "uid rejected: " + peerUid(s));
+                        try { s.close(); } catch (Exception ignored) {}
+                        continue;
+                    }
                     new Handler(s).start();
                 }
             } catch (Exception e) {
                 android.util.Log.e("TBridge", "server died: " + e);
             }
         }
+
+        /** uid gate: the abstract name is not a lock, the peer uid is. */
+        private boolean allowed(LocalSocket s) {
+            int uid = peerUid(s);
+            if (uid < 0) return false;
+            if (uid == android.os.Process.myUid()) return true;   // self (IME, widget)
+            if (uid == 0 || uid == 2000) return true;             // root / shell (rish)
+            return uid == termuxUid();
+        }
+
+        private int termuxUid() {
+            if (termuxUid < 0) {
+                try { termuxUid = getPackageManager().getPackageUid("com.termux", 0); }
+                catch (Exception e) { termuxUid = -2; }           // Termux not installed
+            }
+            return termuxUid;
+        }
+
         void shutdown() {
             try { if (server != null) server.close(); } catch (Exception ignored) {}
         }
     }
 
+    private static int peerUid(LocalSocket s) {
+        try { return s.getPeerCredentials().getUid(); }
+        catch (Exception e) { return -1; }
+    }
+
     private class Handler extends Thread {
-        private final Socket sock;
-        Handler(Socket s) { sock = s; }
+        private final LocalSocket sock;
+        Handler(LocalSocket s) { sock = s; }
 
         @Override
         public void run() {
@@ -131,7 +165,7 @@ public class BridgeService extends Service {
                 BufferedReader in = new BufferedReader(new InputStreamReader(sock.getInputStream(), "UTF-8"));
                 String req = in.readLine();
                 if (req == null || req.trim().isEmpty()) return;
-                // 只接受来自本机的连接(127.0.0.1 绑定已保证)
+                // peer already passed the uid gate in the accept loop
                 String resp = Dispatcher.dispatch(BridgeService.this, req, false);
                 OutputStream out = sock.getOutputStream();
                 out.write((resp + "\n").getBytes("UTF-8"));

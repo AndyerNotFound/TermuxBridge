@@ -25,7 +25,8 @@ final class CmdsMeta {
         r.put("ping", (ctx, p) -> Dispatcher.ok()
                 .put("version", versionName(ctx))
                 .put("sdk", android.os.Build.VERSION.SDK_INT)
-                .put("port", Prefs.port(ctx)));
+                .put("transport", "unix")
+                .put("socket", BridgeService.SOCKET_NAME));
 
         r.put("panic.stop", (ctx, p) -> {
             Panic.stopAll(ctx);

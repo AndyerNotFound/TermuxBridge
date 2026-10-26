@@ -30,8 +30,7 @@ public final class Prefs {
     public static void setEnabled(Context c, String f, boolean v) {
         sp(c).edit().putBoolean("feat." + f, v).apply();
     }
-    public static int port(Context c) { return sp(c).getInt("port", 8021); }
-    public static void setPort(Context c, int p) { sp(c).edit().putInt("port", p).apply(); }
+    /** optional extra auth on top of the uid gate (empty = off) */
     public static String token(Context c) { return sp(c).getString("token", ""); }
     public static void setToken(Context c, String t) { sp(c).edit().putString("token", t).apply(); }
 
@@ -44,7 +43,7 @@ public final class Prefs {
         if (System.currentTimeMillis() - ts > maxAgeMs) return null;
         return sp(c).getString("clipcache", null);
     }
-    // 截图结果回传(ScreenshotActivity 流程写入, TCP poll 读取)
+    // 截图结果回传(ScreenshotActivity 流程写入, 客户端轮询读取)
     public static void setShot(Context c, String path, String error) {
         sp(c).edit().putString("shot", path).putString("shoterr", error)
              .putLong("shotts", System.currentTimeMillis()).apply();

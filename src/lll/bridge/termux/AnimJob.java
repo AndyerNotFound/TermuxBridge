@@ -90,7 +90,12 @@ public final class AnimJob {
         if (mh) lp.height = Math.max(1, Math.round(lerp(h0, dimToPx(to.optDouble("h", 0), dens, h0), k)));
         if (mx) lp.x = Math.round(lerp(x0, dpToPx(to.optDouble("x", x0 / dens), dens), k));
         if (my) lp.y = Math.round(lerp(y0, dpToPx(to.optDouble("y", y0 / dens), dens), k));
-        try { e.wm.updateViewLayout(e.root, lp); } catch (Exception ignored) {}
+        // alpha/radius are view properties — only x/y/w/h need the (expensive,
+        // cross-process) window relayout transaction; sending one per frame for
+        // a pure fade starves it down to 2-3 visible frames on a 60Hz panel
+        if (mx || my || mw || mh) {
+            try { e.wm.updateViewLayout(e.root, lp); } catch (Exception ignored) {}
+        }
         if (ma) e.root.setAlpha(lerp(a0, (float) to.optDouble("alpha", a0), k));
         if (mr) OverlayManager.setWindowRadius(e.root, lerp(r0 < 0 ? currentRadius(e.root) : r0,
                 dpToPx(to.optDouble("radius", 0), dens), k));

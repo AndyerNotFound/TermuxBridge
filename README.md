@@ -1,12 +1,14 @@
 # TermuxBridge
 
-A bridge between [Termux](https://termux.dev) and Android system capabilities that a pure CLI cannot reach: a foreground service + a local TCP JSON interface (127.0.0.1:8021) + a CLI client `tb`.
+A bridge between [Termux](https://termux.dev) and Android system capabilities that a pure CLI cannot reach: a foreground service + a local JSON interface on an abstract unix socket + a CLI client `tb`.
+
+> **v2.0.0 breaking change:** the TCP listener (127.0.0.1:8021) is gone. The transport is now the abstract-namespace unix socket `lll.bridge.termux` (AF_UNIX), with a peer-uid gate (bridge app, Termux, shell 2000, root). Same one-line-JSON wire format; clients must switch to AF_UNIX.
 
 One line of JSON in, one line of JSON out — screenshots, notifications, clipboard, sensors, TTS/STT, touch injection, UI tree dumps, overlay windows and more.
 
 - Package: `lll.bridge.termux`
-- Default port: `8021` (configurable in the app; the listener restarts on change)
-- Bind address: `127.0.0.1` only
+- Transport: abstract unix socket `lll.bridge.termux` (AF_UNIX; Node path `"\0lll.bridge.termux"`, Android `LocalSocket`, Python `"\0" + name`)
+- Access control: peer uid must be the app itself, `com.termux`, `shell` (2000) or `root`; an optional shared token can be set on top
 - Requirements: Android 9+ (minSdk 28); verified on Android 16, arm64
 - License: AGPL-3.0
 
@@ -47,7 +49,7 @@ rish -c "settings put secure enabled_accessibility_services lll.bridge.termux/ll
 One JSON request line → one JSON response line, one connection per request.
 
 ```bash
-echo '{"cmd":"battery","token":"optional"}' | nc -w 5 127.0.0.1 8021
+python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("\0lll.bridge.termux");s.sendall(b'{"cmd":"battery"}\n');print(s.recv(4096).decode())'"
 # {"ok":true,"level":22,"charging":false,"status":"discharging","temp":39.3,"voltage":3.42}
 ```
 
@@ -82,24 +84,32 @@ Errors are always `{"ok":false,"error":"..."}`.
 | `tbridge-toast TEXT` | Toast (`-d long`) |
 | `tbridge-notification -t TITLE -c BODY` | Notification (`-i id` to overwrite) |
 | `tbridge-clipboard-get` / `tbridge-clipboard-set` | Clipboard (auto focus capture; stdin supported) |
+| `tbridge-clipboard-catch` | Force a focus capture, then read it back |
 | `tbridge-battery-status` / `tbridge-net-status` / `tbridge-wifi-connectioninfo` | Status |
 | `tbridge-location` | Location |
 | `tbridge-sensor -l` / `-s NAME` | Sensor list / single sample (CSV) |
 | `tbridge-torch on\|off`, `tbridge-brightness [0-255]`, `tbridge-volume [STREAM [0-MAX]]` | Hardware |
 | `tbridge-tts-speak TEXT` | Speak |
 | `tbridge-share [TEXT\|-]` / `tbridge-open URL` / `tbridge-dial NUM` / `tbridge-sms-send NUM [TEXT]` | Intents |
+| `tbridge-open -w PKG URL` | Open a URI with a specific app (`open.with`) |
 | `tbridge-screenshot FILE` | Screenshot (accessibility first, MediaProjection fallback) |
 | `tbridge-tap X Y` / `tbridge-swipe X1 Y1 X2 Y2 [MS]` / `tbridge-ui [DEPTH]` | Touch / UI tree |
+| `tbridge-a11y` | Accessibility service readiness |
 | `tbridge-record SECONDS [FILE]` / `tbridge-stt` | Recording / speech recognition |
 | `tbridge-features` / `tbridge-feature on\|off NAME` | Module toggles |
 | `tbridge-service start\|stop\|status` / `tbridge-ping` | Service control |
-| `tbridge-overlay ...` | Overlay windows, gestures, events |
+| `tbridge-overlay show\|update\|animate\|hide\|events\|values\|list\|bounds\|tree\|stats\|perm\|demo` | Overlay windows, gestures, events, tweens |
 | `tbridge-notif status\|recent [N]\|clear\|perm\|dismiss KEY` | Notification listener |
+| `tbridge-notif cancel ID\|all`, `channels`, `channel ID [NAME] [-i 0-5]` | Cancel own notifications, inspect/create channels |
 | `tbridge-ime status\|commit TEXT\|show\|hide\|pick` | IME |
+| `tbridge-ime rime [OP] [key=v ...]` | Passthrough to the rime daemon in Termux |
 | `tbridge-media image\|video [N]` | Gallery listing |
-| `tbridge-text TEXT` / `-g` | Write/read the focused input field (accessibility `ACTION_SET_TEXT`) |
+| `tbridge-text TEXT` / `-g` / `-d` | Write/read the focused input field (accessibility `ACTION_SET_TEXT`); `-d` dumps window diagnostics |
+| `tbridge-acc [status\|stats\|none\|window\|content\|both]` | Accessibility event subscription mode and counters |
+| `tbridge-panic status\|stop` | Panic brake: cut overlay, a11y, listener and service at once |
+| `tbridge-proto` | Command list the running app advertises |
 
-Any command accepts `--json` for raw JSON output. Environment: `TBRIDGE_PORT` `TBRIDGE_HOST` `TBRIDGE_TOKEN` `TBRIDGE_TIMEOUT`.
+Any command accepts `--json` for raw JSON output. Environment: `TBRIDGE_TOKEN` `TBRIDGE_TIMEOUT`.
 
 ```bash
 tb ping
@@ -209,7 +219,7 @@ The legacy zero-dep pipeline (`build.sh`, aapt2/d8 by hand) is deprecated since 
 
 ```
 src/lll/bridge/termux/
-  BridgeService.java        Foreground service + TCP server
+  BridgeService.java        Foreground service + local-socket server (uid gate)
   Dispatcher.java           Command routing + feature toggles
   Cmds*.java                Feature modules
   BridgeA11yService.java    Accessibility: screenshots / gestures / UI tree

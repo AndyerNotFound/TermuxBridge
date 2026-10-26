@@ -2,7 +2,7 @@
 <resources>
     <!-- app / system-facing component labels -->
     <string name="app_name">TermuxBridge</string>
-    <string name="acc_desc">TermuxBridge 无障碍服务: 提供截图、模拟点击/滑动、界面树导出。仅由本机 Termux 通过 127.0.0.1 调用, 不联网。</string>
+    <string name="acc_desc">TermuxBridge 无障碍服务: 提供截图、模拟点击/滑动、界面树导出。仅由通过 uid 门禁的本机进程调用, 不联网。</string>
     <string name="svc_label_a11y">TermuxBridge 无障碍</string>
     <string name="svc_label_notif">TermuxBridge 通知监听</string>
     <string name="widget_label">TermuxBridge 状态</string>
@@ -13,11 +13,7 @@
     <string name="notif_service_title">TermuxBridge 运行中</string>
 
     <!-- main screen -->
-    <string name="main_hint_port">端口</string>
-    <string name="main_btn_save_port">保存端口</string>
-    <string name="main_toast_port_range">端口需在 1024-65535</string>
-    <string name="main_toast_port_saved">端口已保存: %1$s, 重启服务生效</string>
-    <string name="main_hint_token">访问 token(可空 = 不校验)</string>
+    <string name="main_hint_token">访问 token(可空 = 关闭; 对端一律过 uid 门禁)</string>
     <string name="main_btn_save_token">保存token</string>
     <string name="main_toast_token_saved">token 已保存</string>
     <string name="main_btn_request_perms">申请权限</string>

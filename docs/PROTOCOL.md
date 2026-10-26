@@ -1,7 +1,9 @@
 # TermuxBridge — Overlay protocol reference
 
 Wire format (all commands): one JSON request line → one JSON response line over
-`127.0.0.1:8021`, one connection per request. Errors are always
+the abstract unix socket `lll.bridge.termux` (v2.0; the old TCP port is gone),
+one connection per request. Peers are uid-gated (app, Termux, shell, root).
+Errors are always
 `{"ok":false,"error":"..."}` — error strings are machine-readable and stay
 English-only regardless of system locale. Command overview: see
 [README](../README.md); this page documents the overlay event stream and the
@@ -20,6 +22,7 @@ text-input editor flow in detail.
 | `overlay.values` | `id` | `values: {nodeId: value}` |
 | `overlay.events` | `since`, `clear`, `wait` | `events: [...]`, `last_seq` |
 | `overlay.stats` | — | commit/move counters, frame-gap percentiles |
+| `overlay.animate` | `id`, `to:{x,y,w,h,radius,alpha}`, `ms`, `ease` | `started` |
 | `overlay.perm` | `request` | `granted`, `hint` |
 
 `overlay.events` semantics: without `since` the queue is read-and-cleared;
@@ -30,10 +33,10 @@ The buffer holds the last 500 events; `seq` is monotonic per service lifetime.
 
 | Command | Params | Response |
 |---|---|---|
-| `panic.stop` | — | cuts everything at once: overlay windows removed, a11y `disableSelf()` (system clears enabled_accessibility_services), notif listener unbound, TCP accept-loop gated, foreground service stopped, START_STICKY broken, boot auto-start suppressed |
+| `panic.stop` | — | cuts everything at once: overlay windows removed, a11y `disableSelf()` (system clears enabled_accessibility_services), notif listener unbound, socket accept-loop gated, foreground service stopped, START_STICKY broken, boot auto-start suppressed |
 | `panic.status` | — | `panicked`, `a11y`, `notif`, `service_up` |
 
-While panicked the TCP accept-loop still accepts one connection per request and
+While panicked the socket accept-loop still accepts one connection per request and
 answers `{"ok":false,"error":"panicked - restart service to recover"}`-style
 status replies; the broadcast channel refuses everything. Recovery: `am start-
 foreground-service -n lll.bridge.termux/.BridgeService -a lll.bridge.START`
@@ -110,10 +113,35 @@ Rules and edge cases:
 
 ## CLI mapping
 
+Every command the app registers is reachable from the CLI:
+
 ```bash
-tbridge-overlay show card.json          # overlay.show
-tbridge-overlay events 0 false          # overlay.events since=0 clear=false
-tbridge-overlay values demo             # overlay.values
-tbridge-overlay tree demo               # overlay.tree
-tbridge-overlay bounds                  # overlay.bounds
+tbridge-overlay show card.json              # overlay.show
+tbridge-overlay update card.json            # overlay.update (in-place diff)
+tbridge-overlay animate demo '{"x":0,"y":600,"ms":250,"ease":"out"}'
+                                            # overlay.animate; "to" wrapper optional
+tbridge-overlay events --since 42 --wait 20 # overlay.events since=42 wait=20
+tbridge-overlay events 0 false              # positional form still works
+tbridge-overlay values demo                 # overlay.values
+tbridge-overlay tree demo                   # overlay.tree
+tbridge-overlay bounds                      # overlay.bounds
+tbridge-overlay stats                       # overlay.stats
+tbridge-acc                                 # acc.events (report mode)
+tbridge-acc content                         # acc.events mode=content
+tbridge-acc stats                           # acc.stats
+tbridge-panic status                        # panic.status
+tbridge-panic stop                          # panic.stop
+tbridge-a11y                                # a11y
+tbridge-proto                               # proto
+tbridge-clipboard-catch                     # clip.catch + clip.read poll
+tbridge-open -w com.android.chrome https://example.com   # open.with
+tbridge-notif cancel all                    # notify.cancel all=true
+tbridge-notif channels                      # notify.channels
+tbridge-notif channel build "Builds" -i 3   # notify.channel
+tbridge-ime rime status                     # ime.rime op=status
+tbridge-text -d                             # text.debug
 ```
+
+`clip.catch` starts the transparent `ClipCatchActivity` and returns
+`{"ok":true,"pending":true}`; read the value back with `clip.read` once the
+activity has focus (the CLI does this poll for you).

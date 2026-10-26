@@ -60,28 +60,6 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         title.setPadding(0, 0, 0, 16);
         root.addView(title);
 
-        // port setting
-        LinearLayout portRow = new LinearLayout(this);
-        portRow.setOrientation(LinearLayout.HORIZONTAL);
-        final EditText portEt = new EditText(this);
-        portEt.setText(String.valueOf(Prefs.port(this)));
-        portEt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        portEt.setHint(getString(R.string.main_hint_port));
-        portRow.addView(portEt, new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton portBtn = new MaterialButton(this);
-        portBtn.setText(getString(R.string.main_btn_save_port));
-        portBtn.setOnClickListener(v -> {
-            int p = 0;
-            try { p = Integer.parseInt(portEt.getText().toString().trim()); } catch (Exception ignored) {}
-            if (p < 1024 || p > 65535) { toast(getString(R.string.main_toast_port_range)); return; }
-            Prefs.setPort(this, p);
-            toast(getString(R.string.main_toast_port_saved, String.valueOf(p)));
-            restartService();
-        });
-        portRow.addView(portBtn);
-        root.addView(portRow);
-
         // token setting
         LinearLayout tokRow = new LinearLayout(this);
         final EditText tokEt = new EditText(this);

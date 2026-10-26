@@ -1,20 +1,31 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# TermuxBridge CLI — 通过本地 TCP 调用跳板 APP
+# TermuxBridge CLI — 经抽象 unix socket 调用跳板 APP (v2.0: TCP 已移除)
 # 用法: tb <命令> [参数...]  |  tb raw '<json>'
-# 环境: TBRIDGE_PORT(默认 8021), TBRIDGE_HOST(默认 127.0.0.1)
+# 环境: TBRIDGE_TOKEN, TBRIDGE_TIMEOUT
 
 set -u
-PORT="${TBRIDGE_PORT:-8021}"
-HOST="${TBRIDGE_HOST:-127.0.0.1}"
 
 die() { printf '❌ %s\n' "$*" >&2; exit 1; }
 
 # 发一行 JSON, 收一行 JSON。无响应时给出明确错误。
 send() {
-  local payload="$1" resp
-  resp=$(printf '%s\n' "$payload" | nc -w "${TBRIDGE_TIMEOUT:-10}" "$HOST" "$PORT" 2>/dev/null)
+  resp=$(TBRIDGE_TIMEOUT="${TBRIDGE_TIMEOUT:-10}" python3 - "$1" <<'TBSHIM'
+import os, socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(float(os.environ["TBRIDGE_TIMEOUT"]))
+s.connect("\0lll.bridge.termux")
+s.sendall((sys.argv[1] + "\n").encode())
+buf = b""
+while not buf.endswith(b"\n"):
+    c = s.recv(65536)
+    if not c:
+        break
+    buf += c
+sys.stdout.write(buf.decode(errors="replace"))
+TBSHIM
+  )
   if [ -z "$resp" ]; then
-    die "无响应。检查: 1) APP 内已『启动服务』 2) 端口=$PORT 与 APP 设置一致 3) 令牌(TBRIDGE_TOKEN)匹配"
+    die "无响应。检查: 1) APP 内已『启动服务』 2) 令牌(TBRIDGE_TOKEN)匹配"
   fi
   printf '%s\n' "$resp"
 }
