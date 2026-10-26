@@ -23,3 +23,9 @@ AndroidManifest.xml.bak
 .vscode/
 *.swp
 local.properties
+reference/
+
+# local backups / reference dumps / scratch tools
+.bak-v184/
+.tools/
+*.bak-pre-rime

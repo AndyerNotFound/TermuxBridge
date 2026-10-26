@@ -42,12 +42,12 @@ final class CmdsOverlay {
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("overlay.show", (ctx, p) -> {
             if (!OverlayManager.granted(ctx)) return Dispatcher.err(
-                    "需要悬浮窗权限: 设置 > 特殊应用权限 > 显示在其他应用上层");
+                    "overlay permission required: Settings > Apps > Special app access > Display over other apps");
             return onMain(ctx, () -> OverlayManager.show(ctx, p));
         });
 
         r.put("overlay.update", (ctx, p) -> {
-            if (!OverlayManager.granted(ctx)) return Dispatcher.err("需要悬浮窗权限");
+            if (!OverlayManager.granted(ctx)) return Dispatcher.err(OverlayManager.ERR_OVERLAY_PERM);
             return onMain(ctx, () -> OverlayManager.update(ctx, p));
         });
 
@@ -105,7 +105,7 @@ final class CmdsOverlay {
                 ctx.startActivity(i);
             }
             return Dispatcher.okPut("granted", ok)
-                    .put("hint", "设置 > 特殊应用权限 > 显示在其他应用上层");
+                    .put("hint", "Settings > Apps > Special app access > Display over other apps");
         });
     }
 }

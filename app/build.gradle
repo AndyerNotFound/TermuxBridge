@@ -11,8 +11,8 @@ android {
         minSdk 28
         // keep in sync with AndroidManifest.xml (single source of truth there)
         targetSdk 36
-        versionCode 11
-        versionName "1.8.0"
+        versionCode 16
+        versionName "1.9.0"
     }
 
     signingConfigs {

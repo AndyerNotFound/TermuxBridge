@@ -7,6 +7,8 @@ import android.view.inputmethod.InputMethodManager;
 
 import java.util.Map;
 
+import org.json.JSONObject;
+
 /** 输入法: 状态 / 注入文本 / 唤起 */
 final class CmdsIme {
     private CmdsIme() {}
@@ -14,12 +16,31 @@ final class CmdsIme {
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("ime.status", (ctx, p) -> BridgeImeService.status(ctx));
 
+        // rime engine passthrough (engine runs in Termux: tbridge-rime start)
+        r.put("ime.rime", (ctx, p) -> {
+            String op = p.optString("op", "status");
+            if (op.equals("status"))
+                return Dispatcher.ok().put("engine", RimeBridge.available() ? "up" : "down");
+            try {
+                JSONObject q = new JSONObject().put("op", op);
+                for (String k : new String[]{"key", "mask", "index", "dir", "value"})
+                    if (p.has(k)) q.put(k, p.get(k));
+                for (String k : new String[]{"name", "id"})
+                    if (p.has(k)) q.put(k, p.getString(k));
+                org.json.JSONObject rsp = RimeBridge.request(q);
+                if (!rsp.optBoolean("ok")) return Dispatcher.err(rsp.optString("error", "rime error"));
+                return Dispatcher.ok().put("rime", rsp);
+            } catch (Exception e) {
+                return Dispatcher.err("rime daemon unreachable (start it in Termux: tbridge-rime start)");
+            }
+        });
+
         r.put("ime.commit", (ctx, p) -> {
             String text = p.optString("text", "");
             if (text.isEmpty()) return Dispatcher.err("missing text");
             boolean ok = Util.mainSync(ctx, () -> BridgeImeService.commitText(text), 3000);
             return ok ? Dispatcher.ok().put("committed", text.length())
-                      : Dispatcher.err("输入法未连接(先选中 TermuxBridge 输入法并聚焦输入框)");
+                      : Dispatcher.err("IME not connected (select the TermuxBridge IME and focus an input field first)");
         });
 
         r.put("ime.show", (ctx, p) -> {

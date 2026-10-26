@@ -1,4 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="acc_desc">TermuxBridge 无障碍服务: 提供截图、模拟点击/滑动、界面树导出。仅由本机 Termux 通过 127.0.0.1 调用, 不联网。</string>
+    <!-- app / system-facing component labels -->
+    <string name="app_name">TermuxBridge</string>
+    <string name="acc_desc">TermuxBridge accessibility service: screenshots, injected taps/swipes, UI tree dumps. Invoked only from local Termux via 127.0.0.1; no network access.</string>
+    <string name="svc_label_a11y">TermuxBridge accessibility</string>
+    <string name="svc_label_notif">TermuxBridge notification listener</string>
+    <string name="widget_label">TermuxBridge status</string>
+    <string name="svc_label_ime">TermuxBridge IME</string>
+
+    <!-- foreground service notification -->
+    <string name="notif_channel_service">TermuxBridge service</string>
+    <string name="notif_service_title">TermuxBridge running</string>
+
+    <!-- main screen -->
+    <string name="main_hint_port">Port</string>
+    <string name="main_btn_save_port">Save port</string>
+    <string name="main_toast_port_range">Port must be 1024-65535</string>
+    <string name="main_toast_port_saved">Port saved: %1$s, restart the service to apply</string>
+    <string name="main_hint_token">Access token (empty = no auth)</string>
+    <string name="main_btn_save_token">Save token</string>
+    <string name="main_toast_token_saved">Token saved</string>
+    <string name="main_btn_request_perms">Request permissions</string>
+    <string name="main_btn_write_settings">Grant write settings</string>
+    <string name="main_btn_overlay_perm">Grant overlay permission</string>
+    <string name="main_btn_battery">Ignore battery optimization</string>
+    <string name="main_toast_unsupported">Unsupported on this system</string>
+    <string name="main_hint_ime_test">IME test field (tap here, then inject via tbridge-ime commit)</string>
+    <string name="main_btn_start">Start service</string>
+    <string name="main_toast_start_requested">Service start requested</string>
+    <string name="main_btn_stop">Stop service</string>
+    <string name="main_toast_stop_requested">Service stop requested</string>
+    <string name="main_section_features">Feature modules (all enabled by default)</string>
+    <string name="main_toast_perms_granted">All permissions granted</string>
+
+    <!-- feature module display names -->
+    <string name="feat_clipboard">Clipboard</string>
+    <string name="feat_notify">Notifications</string>
+    <string name="feat_toast">Toast</string>
+    <string name="feat_beep">Beep</string>
+    <string name="feat_torch">Flashlight</string>
+    <string name="feat_bright">Brightness</string>
+    <string name="feat_volume">Volume</string>
+    <string name="feat_battery">Battery</string>
+    <string name="feat_net">Network</string>
+    <string name="feat_location">Location</string>
+    <string name="feat_sensors">Sensors</string>
+    <string name="feat_tts">TTS</string>
+    <string name="feat_stt">Speech recognition</string>
+    <string name="feat_share">Share/Open/Dial/SMS</string>
+    <string name="feat_screenshot">Screenshot</string>
+    <string name="feat_state_enabled">%1$s enabled</string>
+    <string name="feat_state_disabled">%1$s disabled</string>
+
+    <!-- overlay text input editor -->
+    <string name="editor_title_default">Input</string>
+    <string name="editor_hint">Input text</string>
+    <string name="editor_btn_ok">OK</string>
+    <string name="editor_btn_cancel">Cancel</string>
+
+    <!-- IME -->
+    <!-- IME -->
+    <string name="ime_key_space">Space</string>
+    <string name="ime_key_cn">CN</string>
+    <string name="ime_key_en">EN</string>
+    <string name="ime_pick_schema">Select schema</string>
+    <string name="main_rime_engine">Rime engine</string>
+    <string name="main_rime_up">running</string>
+    <string name="main_rime_down">stopped</string>
+
+    <!-- share chooser -->
+    <string name="share_default_title">Share</string>
 </resources>

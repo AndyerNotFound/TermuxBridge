@@ -69,7 +69,7 @@ final class CmdsApps {
             }
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try { ctx.startActivity(i); return Dispatcher.ok().put("pkg", pkg); }
-            catch (Exception e) { return Dispatcher.err("启动失败(可能被关联启动限制): " + e.getClass().getSimpleName()); }
+            catch (Exception e) { return Dispatcher.err("launch failed (possibly restricted startup): " + e.getClass().getSimpleName()); }
         });
 
         // 应用详情页(用于打开"关联启动/自启动"开关)
@@ -108,7 +108,7 @@ final class CmdsApps {
             if (!pkg.isEmpty()) i.setPackage(pkg);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try { ctx.startActivity(i); return Dispatcher.ok().put("pkg", pkg); }
-            catch (Exception e) { return Dispatcher.err("无匹配应用: " + pkg); }
+            catch (Exception e) { return Dispatcher.err("no matching app: " + pkg); }
         });
     }
 }

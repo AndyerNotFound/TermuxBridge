@@ -29,7 +29,7 @@ final class CmdsGallery {
             JSONArray arr = new JSONArray();
             try (Cursor c = ctx.getContentResolver().query(base, proj, null, null,
                     MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-                if (c == null) return Dispatcher.err("查询失败");
+                if (c == null) return Dispatcher.err("query failed");
                 int n = 0;
                 while (c.moveToNext() && n < limit) {
                     long id = c.getLong(0);
@@ -47,7 +47,7 @@ final class CmdsGallery {
                     n++;
                 }
             } catch (SecurityException se) {
-                return Dispatcher.err("需要相册权限: pm grant lll.bridge.termux android.permission.READ_MEDIA_IMAGES");
+                return Dispatcher.err("gallery permission required: pm grant lll.bridge.termux android.permission.READ_MEDIA_IMAGES");
             }
             return Dispatcher.okPut("items", arr).put("count", arr.length()).put("kind", video ? "video" : "image");
         });

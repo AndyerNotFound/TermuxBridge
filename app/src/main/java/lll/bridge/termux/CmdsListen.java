@@ -41,9 +41,9 @@ final class CmdsListen {
             String key = p.optString("key", "");
             if (key.isEmpty()) return Dispatcher.err("missing key");
             BridgeNotifListener svc = BridgeNotifListener.INSTANCE;
-            if (svc == null) return Dispatcher.err("监听器未连接(需授权通知使用权)");
+            if (svc == null) return Dispatcher.err("listener not connected (grant notification access first)");
             try { svc.cancelNotification(key); return Dispatcher.ok(); }
-            catch (Throwable t) { return Dispatcher.err("无法关闭: " + t.getClass().getSimpleName()); }
+            catch (Throwable t) { return Dispatcher.err("cannot dismiss: " + t.getClass().getSimpleName()); }
         });
 
         r.put("notif.perm", (ctx, p) -> {

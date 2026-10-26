@@ -38,14 +38,14 @@ public class BridgeService extends Service {
     private Notification buildNotification() {
         String ch = "bridge";
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(ch, "TermuxBridge 服务",
+        nm.createNotificationChannel(new NotificationChannel(ch, getString(R.string.notif_channel_service),
                 NotificationManager.IMPORTANCE_LOW));
         PendingIntent pi = PendingIntent.getActivity(this, 0,
                 new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification n = new Notification.Builder(this, ch)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("TermuxBridge 运行中")
+                .setContentTitle(getString(R.string.notif_service_title))
                 .setContentText("127.0.0.1:" + Prefs.port(this))
                 .setContentIntent(pi)
                 .setOngoing(true)

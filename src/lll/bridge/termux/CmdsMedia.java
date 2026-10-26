@@ -47,8 +47,8 @@ final class CmdsMedia {
         // 无障碍能力: 无授权弹窗截图 / 模拟触控 / UI 树
         r.put("shot", (ctx, p) -> {
             if (!BridgeA11yService.ready())
-                return Dispatcher.err("无障碍服务未启用。请到 系统设置 > 无障碍 > TermuxBridge 打开,"
-                        + " 或运行: tb a11y-on");
+                return Dispatcher.err("accessibility service not enabled: Settings > Accessibility > TermuxBridge,"
+                        + " or run: tb a11y-on");
             return BridgeA11yService.screenshot();
         });
 
@@ -75,7 +75,7 @@ final class CmdsMedia {
             if (!BridgeA11yService.ready()) return Dispatcher.err("accessibility service not enabled");
             String text = p.optString("text", "");
             boolean ok = BridgeA11yService.setText(text);
-            if (!ok) return Dispatcher.err("没有可写的输入框(先点一下目标框)");
+            if (!ok) return Dispatcher.err("no writable input field (focus the target field first)");
             return Dispatcher.ok().put("len", text.length()).put("via", "a11y");
         });
 
@@ -84,7 +84,7 @@ final class CmdsMedia {
         r.put("text.get", (ctx, p) -> {
             if (!BridgeA11yService.ready()) return Dispatcher.err("accessibility service not enabled");
             String t = BridgeA11yService.getFocusedText();
-            return t == null ? Dispatcher.err("没有焦点输入框") : Dispatcher.okPut("text", t);
+            return t == null ? Dispatcher.err("no focused input field") : Dispatcher.okPut("text", t);
         });
 
         r.put("a11y", (ctx, p) -> Dispatcher.ok()

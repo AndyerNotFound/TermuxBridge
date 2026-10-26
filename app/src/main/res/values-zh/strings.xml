@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app / system-facing component labels -->
+    <string name="app_name">TermuxBridge</string>
+    <string name="acc_desc">TermuxBridge 无障碍服务: 提供截图、模拟点击/滑动、界面树导出。仅由本机 Termux 通过 127.0.0.1 调用, 不联网。</string>
+    <string name="svc_label_a11y">TermuxBridge 无障碍</string>
+    <string name="svc_label_notif">TermuxBridge 通知监听</string>
+    <string name="widget_label">TermuxBridge 状态</string>
+    <string name="svc_label_ime">TermuxBridge 输入法</string>
+
+    <!-- foreground service notification -->
+    <string name="notif_channel_service">TermuxBridge 服务</string>
+    <string name="notif_service_title">TermuxBridge 运行中</string>
+
+    <!-- main screen -->
+    <string name="main_hint_port">端口</string>
+    <string name="main_btn_save_port">保存端口</string>
+    <string name="main_toast_port_range">端口需在 1024-65535</string>
+    <string name="main_toast_port_saved">端口已保存: %1$s, 重启服务生效</string>
+    <string name="main_hint_token">访问 token(可空 = 不校验)</string>
+    <string name="main_btn_save_token">保存token</string>
+    <string name="main_toast_token_saved">token 已保存</string>
+    <string name="main_btn_request_perms">申请权限</string>
+    <string name="main_btn_write_settings">授予亮度设置</string>
+    <string name="main_btn_overlay_perm">授予悬浮窗权限</string>
+    <string name="main_btn_battery">忽略电池优化</string>
+    <string name="main_toast_unsupported">系统不支持该入口</string>
+    <string name="main_hint_ime_test">输入法测试框（点这里，经 tbridge-ime commit 注入）</string>
+    <string name="main_btn_start">启动服务</string>
+    <string name="main_toast_start_requested">服务已请求启动</string>
+    <string name="main_btn_stop">停止服务</string>
+    <string name="main_toast_stop_requested">服务已请求停止</string>
+    <string name="main_section_features">功能模块 (全部默认启用)</string>
+    <string name="main_toast_perms_granted">权限已齐</string>
+
+    <!-- feature module display names -->
+    <string name="feat_clipboard">剪贴板读写</string>
+    <string name="feat_notify">通知栏</string>
+    <string name="feat_toast">Toast 弹窗</string>
+    <string name="feat_beep">提示音</string>
+    <string name="feat_torch">手电筒</string>
+    <string name="feat_bright">屏幕亮度</string>
+    <string name="feat_volume">音量</string>
+    <string name="feat_battery">电池状态</string>
+    <string name="feat_net">网络状态</string>
+    <string name="feat_location">GPS 定位</string>
+    <string name="feat_sensors">传感器</string>
+    <string name="feat_tts">TTS 朗读</string>
+    <string name="feat_stt">语音识别</string>
+    <string name="feat_share">分享/打开/拨号/短信</string>
+    <string name="feat_screenshot">截图</string>
+    <string name="feat_state_enabled">%1$s 已启用</string>
+    <string name="feat_state_disabled">%1$s 已停用</string>
+
+    <!-- overlay text input editor -->
+    <string name="editor_title_default">输入</string>
+    <string name="editor_hint">输入文本</string>
+    <string name="editor_btn_ok">确定</string>
+    <string name="editor_btn_cancel">取消</string>
+
+    <!-- IME -->
+    <!-- IME -->
+    <string name="ime_key_space">空格</string>
+    <string name="ime_key_cn">中</string>
+    <string name="ime_key_en">英</string>
+    <string name="ime_pick_schema">选择输入方案</string>
+    <string name="main_rime_engine">Rime 引擎</string>
+    <string name="main_rime_up">运行中</string>
+    <string name="main_rime_down">已停止</string>
+
+    <!-- share chooser -->
+    <string name="share_default_title">分享</string>
+</resources>

@@ -33,7 +33,7 @@ final class CmdsPower {
                 ctx.startActivity(i);
                 return Dispatcher.ok().put("shown", true);
             } catch (Exception e) {
-                return Dispatcher.err("无法弹窗(后台启动受限): " + e.getClass().getSimpleName());
+                return Dispatcher.err("cannot show dialog (background start restricted): " + e.getClass().getSimpleName());
             }
         });
 

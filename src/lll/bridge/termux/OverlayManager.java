@@ -40,6 +40,7 @@ public final class OverlayManager {
 
     static class Entry {
         View root;
+        WindowManager wm;
         WindowManager.LayoutParams lp;
         JSONObject layout;
         Map<String, EditText> inputs = new LinkedHashMap<>();
@@ -104,7 +105,7 @@ public final class OverlayManager {
 
     static JSONObject show(Context ctx, JSONObject req) throws Exception {
         long t0 = System.nanoTime();
-        if (!granted(ctx)) return Dispatcher.err("需要悬浮窗权限");
+        if (!granted(ctx)) return Dispatcher.err(ERR_OVERLAY_PERM);
         final String id = req.optString("id", "w" + System.currentTimeMillis());
         Entry e = WINDOWS.get(id);
         if (e != null) remove(ctx, id);
@@ -124,6 +125,9 @@ public final class OverlayManager {
                 : WindowManager.LayoutParams.TYPE_PHONE;
         lp.format = PixelFormat.TRANSLUCENT;
         lp.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+        // windows stay NOT_FOCUSABLE by default (a persistently focused overlay
+        // would swallow system back / other IME interactions); focus is taken
+        // transiently while an input field is being edited (attachInputHandlers)
         if (req.optBoolean("focus", false)) {
             lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         } else {
@@ -166,7 +170,11 @@ public final class OverlayManager {
 
         entry.root = root;
         entry.lp = lp;
+        entry.wm = wm;
         entry.layout = req;
+        // overlay windows never take focus: overlay textinput collects text via
+        // TextInputActivity (a real focused window) so system back / other IMEs
+        // are never swallowed
         if (TOUCH_LOG) android.util.Log.d("TBridgeTouch", "ADD id=" + id + " flags=0x"
                 + Integer.toHexString(lp.flags) + " " + lp.width + "x" + lp.height);
         wm.addView(root, lp);
@@ -208,6 +216,9 @@ public final class OverlayManager {
     /** 窗口级触摸日志: 与节点级(GestureController)分开, 用于判断事件有没有到达窗口 */
     /** 触摸日志开关(默认开, 排查完可关) */
     public static volatile boolean TOUCH_LOG = true;
+
+    /** machine-readable protocol errors stay English (see docs/PROTOCOL.md) */
+    static final String ERR_OVERLAY_PERM = "overlay permission required";
 
     static void logTouch(String id, android.view.MotionEvent ev, boolean trace) {
         try {
@@ -334,6 +345,97 @@ public final class OverlayManager {
     }
 
     /** divider/spacer 这类无固有宽度的节点会把 WRAP 容器撑满, 需给容器兜底宽度 */
+    /**
+     * TextInputActivity result: write the text back into the overlay field and
+     * emit a change event. ok=false means the user cancelled.
+     */
+    static void completeTextInput(String win, String node, String text) {
+        LAST_EDIT_KEY = "";
+        if (win == null || node == null) return;
+        Entry e = WINDOWS.get(win);
+        if (e == null) return;
+        if (text != null) {
+            EditText et = e.inputs.get(node);
+            if (et != null) {
+                et.setText(text);
+                et.setSelection(text.length());
+            }
+        }
+        try {
+            org.json.JSONObject ev = new org.json.JSONObject();
+            ev.put("type", text != null ? "change" : "cancel");
+            ev.put("window", win);
+            ev.put("id", node);
+            if (text != null) ev.put("value", text);
+            ev.put("dev", -1);
+            pushEvent(ev);
+        } catch (Exception ignored) {}
+    }
+
+    /** launch TextInputActivity for an overlay input field (must run on main) */
+    /**
+     * Guards against the double-tap that would otherwise stack two editors.
+     * A time window (not a sticky flag) so a backgrounded editor can never
+     * lock the feature out.
+     */
+    static long LAST_EDIT_AT = 0L;
+    static String LAST_EDIT_KEY = "";
+
+    static void releaseEditor() { LAST_EDIT_KEY = ""; }
+
+    static void requestTextInput(Context ctx, String win, String node, String title) {
+        String key = win + "/" + node;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (key.equals(LAST_EDIT_KEY) && now - LAST_EDIT_AT < 700) return;
+        LAST_EDIT_KEY = key;
+        LAST_EDIT_AT = now;
+        Entry e = WINDOWS.get(win);
+        String preset = "";
+        if (e != null) {
+            EditText et = e.inputs.get(node);
+            if (et != null) preset = et.getText().toString();
+        }
+        try {
+            org.json.JSONObject ev = new org.json.JSONObject();
+            ev.put("type", "edit_request");
+            ev.put("window", win);
+            ev.put("id", node);
+            pushEvent(ev);
+        } catch (Exception ignored) {}
+        android.content.Intent it = new android.content.Intent(ctx, TextInputActivity.class)
+                .putExtra("window", win)
+                .putExtra("node", node)
+                .putExtra("title", title)
+                .putExtra("preset", preset)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            ctx.startActivity(it);
+        } catch (Exception ex) {
+            // surface background-start failures instead of dying silently
+            try {
+                org.json.JSONObject ev = new org.json.JSONObject();
+                ev.put("type", "edit_failed");
+                ev.put("window", win);
+                ev.put("id", node);
+                ev.put("error", String.valueOf(ex));
+                pushEvent(ev);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    /** does this tree contain a text-entry node (input/textinput)? */
+    private static boolean hasInputNode(JSONObject n) {
+        if (n == null) return false;
+        String t = n.optString("type", "");
+        if ("input".equals(t) || "textinput".equals(t)) return true;
+        JSONArray ch = n.optJSONArray("children");
+        if (ch != null) for (int i = 0; i < ch.length(); i++) {
+            JSONObject c = ch.optJSONObject(i);
+            if (c != null && hasInputNode(c)) return true;
+        }
+        return false;
+    }
+
     private static boolean hasFillNode(JSONObject n) {
         if (n == null) return false;
         String t = n.optString("type", "");
@@ -500,6 +602,17 @@ public final class OverlayManager {
                 common(et, n, ctx);
                 String nid = n.optString("id", "input" + entry.inputs.size());
                 entry.inputs.put(nid, et);
+                final String wwin2 = wid;
+                final String ntitle2 = n.optString("title", ctx.getString(R.string.editor_title_default));
+                et.setOnTouchListener((v, ev) -> {
+                    if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                        et.post(() -> requestTextInput(v.getContext(), wwin2, nid, ntitle2));
+                    }
+                    return true;
+                });
+                et.setFocusable(false);
+                et.setLongClickable(false);
+                et.setCursorVisible(false);
                 return et;
             }
             case "progress": {
@@ -625,6 +738,20 @@ public final class OverlayManager {
                 common(til, n, ctx);
                 String nid = n.optString("id", "input" + entry.inputs.size());
                 entry.inputs.put(nid, et2);
+                // the overlay window never takes focus; tapping opens TextInputActivity
+                final String wwin = wid;
+                final String ntitle = n.optString("title", ctx.getString(R.string.editor_title_default));
+                // the inner EditText consumes ACTION_DOWN before TextInputLayout
+                // ever sees it, so the trigger must sit on the field itself
+                et2.setOnTouchListener((v, ev) -> {
+                    if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                        requestTextInput(v.getContext(), wwin, nid, ntitle);
+                    }
+                    return true;    // never let the field take focus / swallow gestures
+                });
+                et2.setFocusable(false);
+                et2.setLongClickable(false);
+                et2.setCursorVisible(false);
                 return til;
             }
             case "spacer": {
@@ -887,6 +1014,12 @@ public final class OverlayManager {
         if (req.has("w")) { e.lp.width = winDim(ctx, req, "w", -2); moved = true; }
         if (req.has("h")) { e.lp.height = winDim(ctx, req, "h", -2); moved = true; }
         if (req.has("gravity")) { e.lp.gravity = gravity(req.optString("gravity", "top|start")); moved = true; }
+        if (req.has("focus")) {
+            boolean f = req.optBoolean("focus", false);
+            if (f) e.lp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            else e.lp.flags |= WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+            moved = true;
+        }
         int blur = req.optInt("blur", -1);
         if (blur >= 0 && Build.VERSION.SDK_INT >= 31) {
             if (blur == 0) { e.lp.flags &= ~WindowManager.LayoutParams.FLAG_BLUR_BEHIND; e.lp.setBlurBehindRadius(0); }

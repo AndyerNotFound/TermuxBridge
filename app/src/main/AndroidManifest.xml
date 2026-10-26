@@ -42,15 +42,20 @@
     <application
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="TermuxBridge"
+        android:label="@string/app_name"
         android:allowBackup="false"
-        android:theme="@style/Theme.TBridge">
+        android:theme="@style/Theme.TBridge"
+        android:localeConfig="@xml/locales_config">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <activity android:name=".TextInputActivity" android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TBridge.Transparent"
+            android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".ClipCatchActivity" android:exported="true"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.TBridge.Transparent"/>
@@ -71,7 +76,7 @@
             android:grantUriPermissions="true"/>
         <service android:name=".BridgeA11yService"
             android:exported="true"
-            android:label="TermuxBridge 无障碍"
+            android:label="@string/svc_label_a11y"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService"/>
@@ -91,7 +96,7 @@
         </receiver>
         <service
             android:name=".BridgeNotifListener"
-            android:label="TermuxBridge 通知监听"
+            android:label="@string/svc_label_notif"
             android:exported="true"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
@@ -101,7 +106,7 @@
         <receiver
             android:name=".BridgeWidgetProvider"
             android:exported="true"
-            android:label="TermuxBridge 状态">
+            android:label="@string/widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -112,7 +117,7 @@
         <service
             android:name=".BridgeImeService"
             android:exported="true"
-            android:label="TermuxBridge 输入法"
+            android:label="@string/svc_label_ime"
             android:permission="android.permission.BIND_INPUT_METHOD">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />

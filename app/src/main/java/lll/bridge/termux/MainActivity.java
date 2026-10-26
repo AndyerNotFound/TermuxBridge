@@ -66,17 +66,17 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         final EditText portEt = new EditText(this);
         portEt.setText(String.valueOf(Prefs.port(this)));
         portEt.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        portEt.setHint("端口");
+        portEt.setHint(getString(R.string.main_hint_port));
         portRow.addView(portEt, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton portBtn = new MaterialButton(this);
-        portBtn.setText("保存端口");
+        portBtn.setText(getString(R.string.main_btn_save_port));
         portBtn.setOnClickListener(v -> {
             int p = 0;
             try { p = Integer.parseInt(portEt.getText().toString().trim()); } catch (Exception ignored) {}
-            if (p < 1024 || p > 65535) { toast("端口需在 1024-65535"); return; }
+            if (p < 1024 || p > 65535) { toast(getString(R.string.main_toast_port_range)); return; }
             Prefs.setPort(this, p);
-            toast("端口已保存: " + p + ", 重启服务生效");
+            toast(getString(R.string.main_toast_port_saved, String.valueOf(p)));
             restartService();
         });
         portRow.addView(portBtn);
@@ -86,26 +86,26 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         LinearLayout tokRow = new LinearLayout(this);
         final EditText tokEt = new EditText(this);
         tokEt.setText(Prefs.token(this));
-        tokEt.setHint("访问 token(可空 = 不校验)");
+        tokEt.setHint(getString(R.string.main_hint_token));
         tokRow.addView(tokEt, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton tokBtn = new MaterialButton(this);
-        tokBtn.setText("保存token");
+        tokBtn.setText(getString(R.string.main_btn_save_token));
         tokBtn.setOnClickListener(v -> {
             Prefs.setToken(this, tokEt.getText().toString().trim());
-            toast("token 已保存");
+            toast(getString(R.string.main_toast_token_saved));
         });
         tokRow.addView(tokBtn);
         root.addView(tokRow);
 
         // permission buttons
         MaterialButton permBtn = new MaterialButton(this);
-        permBtn.setText("申请权限(位置/录音/通知)");
+        permBtn.setText(getString(R.string.main_btn_request_perms));
         permBtn.setOnClickListener(v -> requestPerms());
         root.addView(permBtn);
 
         MaterialButton writeBtn = new MaterialButton(this);
-        writeBtn.setText("授予 系统设置修改(亮度)");
+        writeBtn.setText(getString(R.string.main_btn_write_settings));
         writeBtn.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
                     Uri.parse("package:" + getPackageName()));
@@ -114,7 +114,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         root.addView(writeBtn);
 
         MaterialButton ovBtn = new MaterialButton(this);
-        ovBtn.setText("授予悬浮窗权限");
+        ovBtn.setText(getString(R.string.main_btn_overlay_perm));
         ovBtn.setOnClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
@@ -123,63 +123,73 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
         root.addView(ovBtn);
 
         MaterialButton batBtn = new MaterialButton(this);
-        batBtn.setText("忽略电池优化");
+        batBtn.setText(getString(R.string.main_btn_battery));
         batBtn.setOnClickListener(v -> {
             try {
                 Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                         Uri.parse("package:" + getPackageName()));
                 startActivity(i);
             } catch (Exception e) {
-                Toast.makeText(this, "系统不支持该入口", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, getString(R.string.main_toast_unsupported), Toast.LENGTH_SHORT).show();
             }
         });
         root.addView(batBtn);
 
         // IME test field
         final EditText imeTest = new EditText(this);
-        imeTest.setHint("输入法测试框（点这里，再用 tbridge-ime commit 注入）");
+        imeTest.setHint(getString(R.string.main_hint_ime_test));
         imeTest.setSingleLine(true);
         root.addView(imeTest);
 
         // service control
         MaterialButton startBtn = new MaterialButton(this);
-        startBtn.setText("启动服务");
+        startBtn.setText(getString(R.string.main_btn_start));
         startBtn.setOnClickListener(v -> {
             startForegroundService(new Intent(this, BridgeService.class)
                     .setAction(BridgeService.ACTION_START));
-            toast("服务已请求启动");
+            toast(getString(R.string.main_toast_start_requested));
         });
         root.addView(startBtn);
         MaterialButton stopBtn = new MaterialButton(this);
-        stopBtn.setText("停止服务");
+        stopBtn.setText(getString(R.string.main_btn_stop));
         stopBtn.setOnClickListener(v -> {
             startService(new Intent(this, BridgeService.class)
                     .setAction(BridgeService.ACTION_STOP));
-            toast("服务已请求停止");
+            toast(getString(R.string.main_toast_stop_requested));
         });
         root.addView(stopBtn);
 
+        // rime engine status (checked off the main thread)
+        TextView rimeTv = new TextView(this);
+        rimeTv.setTextSize(13);
+        root.addView(rimeTv);
+        new Thread(() -> {
+            boolean up = RimeBridge.available();
+            runOnUiThread(() -> rimeTv.setText(getString(R.string.main_rime_engine) + ": "
+                    + getString(up ? R.string.main_rime_up : R.string.main_rime_down)));
+        }).start();
+
         // feature toggles
         TextView ft = new TextView(this);
-        ft.setText("功能模块 (全部默认启用)");
+        ft.setText(getString(R.string.main_section_features));
         ft.setPadding(0, 40, 0, 8);
         root.addView(ft);
         Map<String, String> names = new LinkedHashMap<>();
-        names.put("clipboard", "剪贴板读写");
-        names.put("notify", "通知栏");
-        names.put("toast", "Toast 弹窗");
-        names.put("beep", "提示音");
-        names.put("torch", "手电筒");
-        names.put("bright", "屏幕亮度");
-        names.put("volume", "音量");
-        names.put("battery", "电池状态");
-        names.put("net", "网络状态");
-        names.put("location", "GPS 定位");
-        names.put("sensors", "传感器");
-        names.put("tts", "TTS 朗读");
-        names.put("stt", "语音识别");
-        names.put("share", "分享/打开/拨号/短信");
-        names.put("screenshot", "截图");
+        names.put("clipboard", getString(R.string.feat_clipboard));
+        names.put("notify", getString(R.string.feat_notify));
+        names.put("toast", getString(R.string.feat_toast));
+        names.put("beep", getString(R.string.feat_beep));
+        names.put("torch", getString(R.string.feat_torch));
+        names.put("bright", getString(R.string.feat_bright));
+        names.put("volume", getString(R.string.feat_volume));
+        names.put("battery", getString(R.string.feat_battery));
+        names.put("net", getString(R.string.feat_net));
+        names.put("location", getString(R.string.feat_location));
+        names.put("sensors", getString(R.string.feat_sensors));
+        names.put("tts", getString(R.string.feat_tts));
+        names.put("stt", getString(R.string.feat_stt));
+        names.put("share", getString(R.string.feat_share));
+        names.put("screenshot", getString(R.string.feat_screenshot));
         for (Map.Entry<String, String> e : names.entrySet()) {
             final String key = e.getKey();
             LinearLayout row = new LinearLayout(this);
@@ -192,7 +202,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             sw.setChecked(Prefs.enabled(this, key));
             sw.setOnCheckedChangeListener((btn, isChecked) -> {
                 Prefs.setEnabled(this, key, isChecked);
-                toast(e.getValue() + " 已" + (isChecked ? "启用" : "停用"));
+                toast(getString(isChecked ? R.string.feat_state_enabled : R.string.feat_state_disabled, e.getValue()));
             });
             row.addView(sw);
             root.addView(row);
@@ -212,7 +222,7 @@ public class MainActivity extends androidx.appcompat.app.AppCompatActivity {
             need.add(Manifest.permission.RECORD_AUDIO);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             need.add(Manifest.permission.POST_NOTIFICATIONS);
-        if (need.isEmpty()) { toast("权限已齐"); return; }
+        if (need.isEmpty()) { toast(getString(R.string.main_toast_perms_granted)); return; }
         requestPermissions(need.toArray(new String[0]), REQ_PERMS);
     }
 

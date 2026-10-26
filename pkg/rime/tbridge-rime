@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# rime-daemon service control: tbridge-rime start|stop|status|deploy
+case "${1:-}" in
+  start)
+    pgrep -f "rime/daemon/rime-daemon" >/dev/null && { echo "already running"; exit 0; }
+    nohup "$HOME/rime/daemon/rime-daemon" >> "$HOME/rime/daemon/daemon.log" 2>&1 &
+    disown
+    echo "started" ;;
+  stop)  pkill -f "rime/daemon/rime-daemon"; echo "stopped" ;;
+  status) pgrep -f "rime/daemon/rime-daemon" >/dev/null && echo "running" || echo "stopped" ;;
+  deploy) cd "$HOME/rime/wanxiang" && rime_deployer --build . "$PREFIX/share/rime-data" "$HOME/rime/wanxiang/build" && echo "deployed" ;;
+  *) echo "usage: tbridge-rime start|stop|status|deploy"; exit 1 ;;
+esac

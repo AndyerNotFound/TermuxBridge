@@ -30,7 +30,7 @@ final class CmdsRole {
 
     static void register(Map<String, Dispatcher.Cmd> r) {
         r.put("role.list", (ctx, p) -> {
-            if (Build.VERSION.SDK_INT < 29) return Dispatcher.err("需 Android 10+");
+            if (Build.VERSION.SDK_INT < 29) return Dispatcher.err("requires Android 10+");
             RoleManager rm = ctx.getSystemService(RoleManager.class);
             JSONArray arr = new JSONArray();
             for (Map.Entry<String, String> e : roles().entrySet()) {
@@ -43,12 +43,12 @@ final class CmdsRole {
         });
 
         r.put("role.request", (ctx, p) -> {
-            if (Build.VERSION.SDK_INT < 29) return Dispatcher.err("需 Android 10+");
+            if (Build.VERSION.SDK_INT < 29) return Dispatcher.err("requires Android 10+");
             String key = p.optString("role", "");
             String role = roles().get(key);
-            if (role == null) return Dispatcher.err("未知角色: " + key);
+            if (role == null) return Dispatcher.err("unknown role: " + key);
             RoleManager rm = ctx.getSystemService(RoleManager.class);
-            if (!rm.isRoleAvailable(role)) return Dispatcher.err("系统不支持该角色");
+            if (!rm.isRoleAvailable(role)) return Dispatcher.err("role not supported by the system");
             if (rm.isRoleHeld(role)) return Dispatcher.ok().put("already", true);
             // 后台直接 startActivity 会被系统拦截: 先拉起自己的 Activity, 由前台发起请求
             Intent i = new Intent(ctx, MainActivity.class)
@@ -57,9 +57,9 @@ final class CmdsRole {
             try {
                 ctx.startActivity(i);
                 return Dispatcher.ok().put("requested", true)
-                        .put("note", "已拉起前台页面并发起角色请求; 成为默认电话/短信应用还需实现对应 UI 与权限");
+                        .put("note", "foreground activity started with the role request; becoming the default dialer/SMS app additionally requires that app's UI and permissions");
             } catch (Exception e) {
-                return Dispatcher.err("无法弹窗: " + e.getClass().getSimpleName());
+                return Dispatcher.err("cannot show dialog: " + e.getClass().getSimpleName());
             }
         });
     }

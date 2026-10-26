@@ -48,7 +48,7 @@ final class CmdsInteract {
             } else {
                 return Dispatcher.err("need text or data(base64)");
             }
-            ctx.startActivity(Intent.createChooser(i, p.optString("title", "分享"))
+            ctx.startActivity(Intent.createChooser(i, p.optString("title", ctx.getString(R.string.share_default_title)))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return Dispatcher.ok();
         });
