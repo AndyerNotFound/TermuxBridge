@@ -47,6 +47,10 @@ final class CmdsTheme {
             return Dispatcher.okPut("colors", o);
         });
 
+        // Resolved MD3 token values (hex) from the app theme; API 31+ = Material You
+        r.put("theme.tokens", (ctx, p) ->
+                Dispatcher.okPut("tokens", OverlayManager.tokens(ctx)));
+
         // 模糊能力: 跨窗口模糊开关 / 是否支持 / SDK
         r.put("theme.blur", (ctx, p) -> {
             WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);

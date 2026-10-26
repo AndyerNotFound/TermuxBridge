@@ -104,7 +104,7 @@ tbridge — TermuxBridge 命令行 (Termux:API 风格)
 
   通知/外观/应用
     tbridge-notif status|recent [N]|clear|perm|dismiss KEY
-    tbridge-theme colors|blur
+    tbridge-theme colors|tokens|blur
     tbridge-app list [关键词]|launch PKG [URI]|info PKG|settings [PKG]
     tbridge-widget update|pin|info
 
@@ -232,8 +232,9 @@ cmd_theme() {
   local sub="${1:-colors}"; shift || true
   case "$sub" in
     colors) send "$(printf '{%s"cmd":"theme.colors"}' "$(tok)")" | okcheck | out .colors ;;
+    tokens) send "$(printf '{%s"cmd":"theme.tokens"}' "$(tok)")" | okcheck | out .tokens ;;
     blur)   send "$(printf '{%s"cmd":"theme.blur"}' "$(tok)")" | okcheck | out . ;;
-    *) die "用法: tbridge-theme colors|blur" ;;
+    *) die "用法: tbridge-theme colors|tokens|blur" ;;
   esac
 }
 

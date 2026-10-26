@@ -40,12 +40,40 @@ final class MdcTheme {
     private MdcTheme() {}
 
     /** Resolve a color spec: empty -> def; token name -> theme attribute; else hex. */
+    private static volatile android.content.Context APP_CTX;
+
+    /** Application context wrapped with Theme.TBridge — MDC views require a
+     *  Material Components theme; service contexts carry the system default. */
+    static Context themedContext(Context ctx) {
+        theme(ctx);
+        return APP_CTX != null ? APP_CTX : ctx;
+    }
+
+    private static volatile android.content.res.Resources.Theme APP_THEME;
+
+    /** Cache the application theme (Theme.TBridge) — service contexts do not
+     *  inherit the application theme, so resolve against the app instance. */
+    private static android.content.res.Resources.Theme theme(Context ctx) {
+        if (APP_THEME == null) {
+            synchronized (MdcTheme.class) {
+                if (APP_THEME == null) {
+                    android.content.Context app = ctx.getApplicationContext();
+                    // ContextThemeWrapper layers the app theme with Theme.TBridge;
+                    // service contexts would otherwise resolve against the system default
+                    APP_CTX = new android.view.ContextThemeWrapper(app, R.style.Theme_TBridge);
+                    APP_THEME = APP_CTX.getTheme();
+                }
+            }
+        }
+        return APP_THEME;
+    }
+
     static int resolve(Context ctx, String spec, int def) {
         if (spec == null || spec.isEmpty()) return def;
         Integer attr = TOKENS.get(spec);
         if (attr != null) {
             TypedValue tv = new TypedValue();
-            if (ctx.getTheme().resolveAttribute(attr, tv, true)) return tv.data;
+            if (theme(ctx).resolveAttribute(attr, tv, true)) return tv.data;
             return def;
         }
         return Util.color(spec, def);

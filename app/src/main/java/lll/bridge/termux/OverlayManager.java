@@ -110,7 +110,9 @@ public final class OverlayManager {
         if (e != null) remove(ctx, id);
 
         Entry entry = new Entry();
-        View root = build(ctx, req.optJSONObject("view") != null
+        // MDC views need a Material Components theme; wrap once per window
+        final Context tctx = MdcTheme.themedContext(ctx);
+        View root = build(tctx, req.optJSONObject("view") != null
                 ? req.optJSONObject("view") : req, id, entry);
         if (root == null) return Dispatcher.err("empty view");
 
@@ -344,6 +346,23 @@ public final class OverlayManager {
         return false;
     }
 
+    /** MD3 color token -> resolved hex, for tools that need the concrete value
+     *  (e.g. to color notifications). */
+    static JSONObject tokens(Context ctx) {
+        String[] names = {"primary", "onPrimary", "primaryContainer", "onPrimaryContainer",
+                "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer",
+                "tertiary", "onTertiary", "surface", "onSurface", "surfaceVariant",
+                "onSurfaceVariant", "background", "onBackground", "error", "onError", "outline"};
+        JSONObject o = new JSONObject();
+        for (String t : names) {
+            int c = MdcTheme.resolve(ctx, t, 0);
+            if (c != 0) {
+                try { o.put(t, String.format("#%08X", c)); } catch (Exception ignored) {}
+            }
+        }
+        return o;
+    }
+
     private static GestureController newGC(Context ctx, String wid, JSONObject n, Entry entry) {
         GestureController c = new GestureController(ctx, wid, n.optString("id", ""),
                 n.optString("text", ""), n);
@@ -490,6 +509,124 @@ public final class OverlayManager {
                 common(pb, n, ctx);
                 return pb;
             }
+            case "card": {
+                // MaterialCardView: MD3 card with elevation/stroke/ripple semantics
+                com.google.android.material.card.MaterialCardView card =
+                        new com.google.android.material.card.MaterialCardView(ctx);
+                card.setCardBackgroundColor(MdcTheme.resolve(ctx, n.optString("bg", "surface"), 0));
+                int stroke = dp(ctx, n.optDouble("stroke", 0));
+                if (stroke > 0) {
+                    card.setStrokeWidth(stroke);
+                    card.setStrokeColor(MdcTheme.resolve(ctx, n.optString("stroke_color", "outline"), 0xFF79747E));
+                }
+                card.setRadius(dp(ctx, n.optDouble("radius", 12)));
+                card.setCardElevation(dp(ctx, n.optDouble("elevation", n.has("elevation") ? 1 : 0)));
+                card.setClickable(n.optJSONObject("on") != null);
+                LinearLayout inner = new LinearLayout(ctx);
+                inner.setOrientation(LinearLayout.VERTICAL);
+                card.addView(inner);
+                JSONArray ch = n.optJSONArray("children");
+                if (ch != null) {
+                    for (int i = 0; i < ch.length(); i++) {
+                        JSONObject c = ch.optJSONObject(i);
+                        if (c == null) continue;
+                        View cv = build(ctx, c, wid, entry);
+                        if (cv == null) continue;
+                        if (!c.optString("id", "").isEmpty()) cv.setTag(c.optString("id"));
+                        inner.addView(cv, childLp(ctx, c));
+                    }
+                }
+                if (n.optJSONObject("on") != null) {
+                    attachGC(card, newGC(ctx, wid, n, entry), entry);
+                }
+                common(card, n, ctx);
+                return card;
+            }
+            case "switch": {
+                com.google.android.material.switchmaterial.SwitchMaterial sw =
+                        new com.google.android.material.switchmaterial.SwitchMaterial(ctx);
+                sw.setText(n.optString("text", ""));
+                sw.setChecked(n.optBoolean("value", false));
+                sw.setTextColor(MdcTheme.resolve(ctx, n.optString("color", "onSurface"), 0xFF1D1B20));
+                sw.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                common(sw, n, ctx);
+                final String nid = n.optString("id", "");
+                if (!nid.isEmpty()) {
+                    sw.setOnCheckedChangeListener((b, checked) -> {
+                        try {
+                            org.json.JSONObject ev = new org.json.JSONObject();
+                            ev.put("type", "change");
+                            ev.put("window", wid);
+                            ev.put("id", nid);
+                            ev.put("value", checked);
+                            ev.put("dev", -1);
+                            pushEvent(ev);
+                        } catch (Exception ignored) {}
+                    });
+                }
+                return sw;
+            }
+            case "chip": {
+                com.google.android.material.chip.Chip chip =
+                        new com.google.android.material.chip.Chip(ctx);
+                chip.setText(n.optString("text", ""));
+                chip.setCheckable(n.optBoolean("checkable", false));
+                chip.setChecked(n.optBoolean("value", false));
+                if (n.optBoolean("closable", false)) chip.setCloseIconVisible(true);
+                chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                common(chip, n, ctx);
+                final String nid = n.optString("id", "");
+                final String label = n.optString("text", "");
+                if (n.optJSONObject("on") != null) {
+                    attachGC(chip, newGC(ctx, wid, n, entry), entry);
+                    chip.setClickable(true);
+                }
+                return chip;
+            }
+            case "slider": {
+                com.google.android.material.slider.Slider sl =
+                        new com.google.android.material.slider.Slider(ctx);
+                sl.setValueFrom((float) n.optDouble("min", 0));
+                sl.setValueTo((float) n.optDouble("max", 100));
+                sl.setValue((float) n.optDouble("value", n.optDouble("min", 0)));
+                sl.setStepSize((float) n.optDouble("step", 1));
+                common(sl, n, ctx);
+                final String nid = n.optString("id", "");
+                if (!nid.isEmpty()) {
+                    sl.addOnChangeListener((sld, val, fromUser) -> {
+                        if (!fromUser) return;
+                        try {
+                            org.json.JSONObject ev = new org.json.JSONObject();
+                            ev.put("type", "change");
+                            ev.put("window", wid);
+                            ev.put("id", nid);
+                            ev.put("value", val);
+                            ev.put("dev", -1);
+                            pushEvent(ev);
+                        } catch (Exception ignored) {}
+                    });
+                }
+                return sl;
+            }
+            case "textinput": {
+                // TextInputLayout wraps an EditText; id moves to the inner field for values/inputs
+                com.google.android.material.textfield.TextInputLayout til =
+                        new com.google.android.material.textfield.TextInputLayout(ctx);
+                til.setHint(n.optString("hint", ""));
+                com.google.android.material.textfield.TextInputEditText et2 =
+                        new com.google.android.material.textfield.TextInputEditText(til.getContext());
+                et2.setText(n.optString("text", ""));
+                et2.setInputType(n.optBoolean("multiline", false)
+                        ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                        : InputType.TYPE_CLASS_TEXT);
+                et2.setTextSize(TypedValue.COMPLEX_UNIT_SP, (float) n.optDouble("size", 14));
+                til.addView(et2, new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                common(til, n, ctx);
+                String nid = n.optString("id", "input" + entry.inputs.size());
+                entry.inputs.put(nid, et2);
+                return til;
+            }
             case "spacer": {
                 View v = new View(ctx);
                 common(v, n, ctx);
@@ -607,6 +744,98 @@ public final class OverlayManager {
                 if (!(v instanceof TextView) && v.getClass() != View.class) return false;
                 v.setBackgroundColor(MdcTheme.resolve(ctx, n.optString("color", ""), 0x33000000));
                 v.setMinimumHeight(Math.max(1, dp(ctx, n.optDouble("h", 1))));
+                return true;
+            }
+            case "card": {
+                if (!(v instanceof com.google.android.material.card.MaterialCardView)) return false;
+                com.google.android.material.card.MaterialCardView card =
+                        (com.google.android.material.card.MaterialCardView) v;
+                card.setCardBackgroundColor(MdcTheme.resolve(ctx, n.optString("bg", "surface"), 0));
+                int stroke = dp(ctx, n.optDouble("stroke", 0));
+                if (stroke > 0) {
+                    card.setStrokeWidth(stroke);
+                    card.setStrokeColor(MdcTheme.resolve(ctx, n.optString("stroke_color", "outline"), 0xFF79747E));
+                }
+                common(card, n, ctx);
+                // children patch: same diff algorithm as col/row
+                LinearLayout inner = (LinearLayout) card.getChildAt(0);
+                JSONArray ch = n.optJSONArray("children");
+                int wantCount = ch == null ? 0 : ch.length();
+                while (inner.getChildCount() > wantCount) inner.removeViewAt(inner.getChildCount() - 1);
+                for (int i = 0; i < wantCount; i++) {
+                    JSONObject c = ch.optJSONObject(i);
+                    if (c == null) continue;
+                    if (i < inner.getChildCount()) {
+                        View child = inner.getChildAt(i);
+                        boolean same = patch(child, c, ctx, wid, entry);
+                        if (!same) {
+                            inner.removeViewAt(i);
+                            View nv = build(ctx, c, wid, entry);
+                            if (nv != null) inner.addView(nv, i, childLp(ctx, c));
+                        } else {
+                            child.setLayoutParams(childLp(ctx, c));
+                        }
+                    } else {
+                        View nv = build(ctx, c, wid, entry);
+                        if (nv != null) inner.addView(nv, childLp(ctx, c));
+                    }
+                }
+                return true;
+            }
+            case "switch": {
+                if (!(v instanceof com.google.android.material.switchmaterial.SwitchMaterial)) return false;
+                com.google.android.material.switchmaterial.SwitchMaterial sw =
+                        (com.google.android.material.switchmaterial.SwitchMaterial) v;
+                sw.setOnCheckedChangeListener(null);   // avoid event echo during patch
+                String t = n.optString("text", "");
+                if (!t.contentEquals(sw.getText())) sw.setText(t);
+                sw.setChecked(n.optBoolean("value", false));
+                sw.setTextColor(MdcTheme.resolve(ctx, n.optString("color", "onSurface"), 0xFF1D1B20));
+                common(sw, n, ctx);
+                final String nid = n.optString("id", "");
+                if (!nid.isEmpty()) {
+                    sw.setOnCheckedChangeListener((b, checked) -> {
+                        try {
+                            org.json.JSONObject ev = new org.json.JSONObject();
+                            ev.put("type", "change"); ev.put("window", wid);
+                            ev.put("id", nid); ev.put("value", checked); ev.put("dev", -1);
+                            pushEvent(ev);
+                        } catch (Exception ignored) {}
+                    });
+                }
+                return true;
+            }
+            case "chip": {
+                if (!(v instanceof com.google.android.material.chip.Chip)) return false;
+                com.google.android.material.chip.Chip chip = (com.google.android.material.chip.Chip) v;
+                String t = n.optString("text", "");
+                if (!t.contentEquals(chip.getText())) chip.setText(t);
+                chip.setChecked(n.optBoolean("value", false));
+                common(chip, n, ctx);
+                return true;
+            }
+            case "slider": {
+                if (!(v instanceof com.google.android.material.slider.Slider)) return false;
+                com.google.android.material.slider.Slider sl = (com.google.android.material.slider.Slider) v;
+                sl.setValueFrom((float) n.optDouble("min", 0));
+                sl.setValueTo((float) n.optDouble("max", 100));
+                sl.setValue((float) n.optDouble("value", n.optDouble("min", 0)));
+                common(sl, n, ctx);
+                return true;
+            }
+            case "textinput": {
+                if (!(v instanceof com.google.android.material.textfield.TextInputLayout)) return false;
+                com.google.android.material.textfield.TextInputLayout til =
+                        (com.google.android.material.textfield.TextInputLayout) v;
+                til.setHint(n.optString("hint", ""));
+                com.google.android.material.textfield.TextInputEditText et2 =
+                        (com.google.android.material.textfield.TextInputEditText) til.getEditText();
+                if (et2 != null) {
+                    String t = n.optString("text", "");
+                    if (!t.contentEquals(et2.getText())) et2.setText(t);
+                }
+                entry.inputs.put(n.optString("id", "input" + entry.inputs.size()), et2);
+                common(til, n, ctx);
                 return true;
             }
             case "spacer": {
