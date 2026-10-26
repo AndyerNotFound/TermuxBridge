@@ -4,7 +4,7 @@
 - 仓库: `/data/data/com.termux/files/home/tbridge-app`，包名 `lll.bridge.termux`，AGPL-3.0，remote `https://github.com/AndyerNotFound/TermuxBridge`
 - 语言: Java + AGP/Material3（`com.google.android.material:material:1.14.0`），compileSdk 36 / minSdk 28
 - 真源: `app/src/main/java`；`src/` 是镜像，改完跑 `./tools/sync-src.sh`
-- 构建: `TBRIDGE_KS_PASS=bridge123 ./build-apk.sh`（内部带 `TBRIDGE_SKIP_LINT=1`；Gradle 不在 PATH）
+- 构建: `TBRIDGE_KS_PASS=<keystore-password> ./build-apk.sh`（内部带 `TBRIDGE_SKIP_LINT=1`；Gradle 不在 PATH）
 - 装机: `cat app/build/outputs/apk/release/app-release.apk | ~/Shizuku/rish -c "pm install -r -S <bytes>"`
 - 服务端口: `127.0.0.1:8021`，JSON 行协议；客户端为 `~/bin/tb`（`tbridge` 脚本）
 - 已装版本: 1.8.3 (versionCode 14)；下一版: **1.8.4 / versionCode 15**
@@ -103,7 +103,7 @@ tb overlay show '{"id":"t","x":0,"y":0,"w":240,"view":{"type":"col","children":[
 ## 6. 执行顺序（一次编译）
 1. 抽词 → 写 `values/strings.xml`(en) + `values-zh/strings.xml`(zh) → 改 Java 引用 → 改 Manifest → 改 gradle 版本
 2. 全仓 grep 复核 0 残留 → `./tools/sync-src.sh`
-3. **唯一一次** `TBRIDGE_KS_PASS=bridge123 ./build-apk.sh`
+3. **唯一一次** `TBRIDGE_KS_PASS=<keystore-password> ./build-apk.sh`
 4. `pm install -r` 一次
 5. 跑第 5 节验收
 6. 文档 + commit + push（`git -c http.proxy=http://127.0.0.1:7890 push`）→ `gh release create v1.8.4`
