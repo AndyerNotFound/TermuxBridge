@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- App theme: Material 3. On API 31+ the platform fills the dynamic-color
-         tokens from the wallpaper; on API 28-30 the Material Components fallback
-         values apply. -->
+    <!-- App theme: Material 3. tb_* attrs are our own stable token surface for
+         runtime lookup (MdcTheme); each points at the Material color roles. -->
     <style name="Theme.TBridge" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/tb_primary</item>
         <item name="colorOnPrimary">@color/tb_on_primary</item>
@@ -15,9 +14,25 @@
         <item name="android:colorBackground">@color/tb_background</item>
         <item name="colorOnBackground">@color/tb_on_background</item>
         <item name="colorSurfaceContainer">@color/tb_surface_container</item>
+
+        <item name="tbColorPrimary">@color/tb_primary</item>
+        <item name="tbColorOnPrimary">@color/tb_on_primary</item>
+        <item name="tbColorPrimaryContainer">@color/tb_primary_container</item>
+        <item name="tbColorOnPrimaryContainer">@color/tb_on_primary_container</item>
+        <item name="tbColorSecondary">@color/tb_secondary</item>
+        <item name="tbColorOnSecondary">@color/tb_on_secondary</item>
+        <item name="tbColorSurface">@color/tb_surface</item>
+        <item name="tbColorOnSurface">@color/tb_on_surface</item>
+        <item name="tbColorBackground">@color/tb_background</item>
+        <item name="tbColorOnBackground">@color/tb_on_background</item>
+        <item name="tbColorSurfaceVariant">@color/tb_surface_container</item>
+        <item name="tbColorOnSurfaceVariant">@color/tb_on_surface</item>
+        <item name="tbColorError">#FFB3261E</item>
+        <item name="tbColorOnError">#FFFFFFFF</item>
+        <item name="tbColorOutline">#FF79747E</item>
     </style>
 
-    <style name="Theme.TBridge.Transparent" parent="Theme.Material3.Light.NoActionBar">
+    <style name="Theme.TBridge.Transparent" parent="Theme.TBridge">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>

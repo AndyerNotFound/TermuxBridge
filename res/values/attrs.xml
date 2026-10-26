@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="tbColorPrimary" format="color"/>
+    <attr name="tbColorOnPrimary" format="color"/>
+    <attr name="tbColorPrimaryContainer" format="color"/>
+    <attr name="tbColorOnPrimaryContainer" format="color"/>
+    <attr name="tbColorSecondary" format="color"/>
+    <attr name="tbColorOnSecondary" format="color"/>
+    <attr name="tbColorSecondaryContainer" format="color"/>
+    <attr name="tbColorOnSecondaryContainer" format="color"/>
+    <attr name="tbColorTertiary" format="color"/>
+    <attr name="tbColorOnTertiary" format="color"/>
+    <attr name="tbColorSurface" format="color"/>
+    <attr name="tbColorOnSurface" format="color"/>
+    <attr name="tbColorSurfaceVariant" format="color"/>
+    <attr name="tbColorOnSurfaceVariant" format="color"/>
+    <attr name="tbColorBackground" format="color"/>
+    <attr name="tbColorOnBackground" format="color"/>
+    <attr name="tbColorError" format="color"/>
+    <attr name="tbColorOnError" format="color"/>
+    <attr name="tbColorOutline" format="color"/>
+</resources>

@@ -1,3 +1,6 @@
+# 误生成的嵌套 git 仓库(不能删,会挡住 git add)
+/main/
+
 # build artifacts
 build/
 app/build/

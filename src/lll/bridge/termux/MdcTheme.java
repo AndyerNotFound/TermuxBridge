@@ -16,25 +16,25 @@ import java.util.Map;
 final class MdcTheme {
     private static final Map<String, Integer> TOKENS = new HashMap<>();
     static {
-        TOKENS.put("primary", com.google.android.material.R.attr.colorPrimary);
-        TOKENS.put("onPrimary", com.google.android.material.R.attr.colorOnPrimary);
-        TOKENS.put("primaryContainer", com.google.android.material.R.attr.colorPrimaryContainer);
-        TOKENS.put("onPrimaryContainer", com.google.android.material.R.attr.colorOnPrimaryContainer);
-        TOKENS.put("secondary", com.google.android.material.R.attr.colorSecondary);
-        TOKENS.put("onSecondary", com.google.android.material.R.attr.colorOnSecondary);
-        TOKENS.put("secondaryContainer", com.google.android.material.R.attr.colorSecondaryContainer);
-        TOKENS.put("onSecondaryContainer", com.google.android.material.R.attr.colorOnSecondaryContainer);
-        TOKENS.put("tertiary", com.google.android.material.R.attr.colorTertiary);
-        TOKENS.put("onTertiary", com.google.android.material.R.attr.colorOnTertiary);
-        TOKENS.put("surface", com.google.android.material.R.attr.colorSurface);
-        TOKENS.put("onSurface", com.google.android.material.R.attr.colorOnSurface);
-        TOKENS.put("surfaceVariant", com.google.android.material.R.attr.colorSurfaceVariant);
-        TOKENS.put("onSurfaceVariant", com.google.android.material.R.attr.colorOnSurfaceVariant);
+        TOKENS.put("primary", R.attr.tbColorPrimary);
+        TOKENS.put("onPrimary", R.attr.tbColorOnPrimary);
+        TOKENS.put("primaryContainer", R.attr.tbColorPrimaryContainer);
+        TOKENS.put("onPrimaryContainer", R.attr.tbColorOnPrimaryContainer);
+        TOKENS.put("secondary", R.attr.tbColorSecondary);
+        TOKENS.put("onSecondary", R.attr.tbColorOnSecondary);
+        TOKENS.put("secondaryContainer", R.attr.tbColorSecondaryContainer);
+        TOKENS.put("onSecondaryContainer", R.attr.tbColorOnSecondaryContainer);
+        TOKENS.put("tertiary", R.attr.tbColorTertiary);
+        TOKENS.put("onTertiary", R.attr.tbColorOnTertiary);
+        TOKENS.put("surface", R.attr.tbColorSurface);
+        TOKENS.put("onSurface", R.attr.tbColorOnSurface);
+        TOKENS.put("surfaceVariant", R.attr.tbColorSurfaceVariant);
+        TOKENS.put("onSurfaceVariant", R.attr.tbColorOnSurfaceVariant);
         TOKENS.put("background", android.R.attr.colorBackground);
-        TOKENS.put("onBackground", com.google.android.material.R.attr.colorOnBackground);
-        TOKENS.put("error", com.google.android.material.R.attr.colorError);
-        TOKENS.put("onError", com.google.android.material.R.attr.colorOnError);
-        TOKENS.put("outline", com.google.android.material.R.attr.colorOutline);
+        TOKENS.put("onBackground", R.attr.tbColorOnBackground);
+        TOKENS.put("error", R.attr.tbColorError);
+        TOKENS.put("onError", R.attr.tbColorOnError);
+        TOKENS.put("outline", R.attr.tbColorOutline);
     }
 
     private MdcTheme() {}
