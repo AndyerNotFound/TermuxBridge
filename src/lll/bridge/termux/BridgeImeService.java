@@ -152,11 +152,21 @@ public class BridgeImeService extends InputMethodService {
 
     // ---- key routing: engine (rime) in CN mode, direct in EN mode / fallback ----
 
+    /** JSONObject.put throws a checked exception; build request maps through varargs instead */
+    private static JSONObject jq(Object... kv) {
+        JSONObject o = new JSONObject();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            try { o.put((String) kv[i], kv[i + 1]); }
+            catch (org.json.JSONException e) { throw new IllegalStateException(e); }
+        }
+        return o;
+    }
+
     private void onKey(char c) {
         if (c == 0xff0d) { enter(); return; }
         if (!asciiMode && engineUp) {
             long k = (c == 0xff08) ? 0xff08 : c;
-            send(new JSONObject().put("op", "key").put("key", k), () -> fallback(c));
+            send(jq("op", "key", "key", k), () -> fallback(c));
             return;
         }
         fallback(c);
@@ -239,7 +249,7 @@ public class BridgeImeService extends InputMethodService {
         tv.setPadding(p, p / 2, p, p / 2);
         if (idx == RimeBridge.highlight) tv.setTypeface(null, Typeface.BOLD);
         if (idx >= 0) tv.setOnClickListener(v ->
-                send(new JSONObject().put("op", "select").put("index", idx), () -> {}));
+                send(jq("op", "select", "index", idx), () -> {}));
         return tv;
     }
 
@@ -251,8 +261,7 @@ public class BridgeImeService extends InputMethodService {
         asciiMode = !asciiMode;
         paintToggle();
         if (engineUp) {
-            send(new JSONObject()
-                    .put("op", "option").put("name", "ascii_mode").put("value", asciiMode ? 1 : 0), () -> {});
+            send(jq("op", "option", "name", "ascii_mode", "value", asciiMode ? 1 : 0), () -> {});
         }
     }
 
@@ -278,7 +287,7 @@ public class BridgeImeService extends InputMethodService {
                     pm.getMenu().getItem(pm.getMenu().size() - 1).setChecked(id.equals(current));
                     int at = pm.getMenu().size() - 1;
                     pm.getMenu().getItem(at).setOnMenuItemClickListener(item -> {
-                        send(new JSONObject().put("op", "schema").put("id", id), () -> {});
+                        send(jq("op", "schema", "id", id), () -> {});
                         return true;
                     });
                 }
@@ -305,7 +314,7 @@ public class BridgeImeService extends InputMethodService {
     private void enter() {
         // engine composing? let rime handle the return key (commit raw / select)
         if (!asciiMode && engineUp && !RimeBridge.preedit.isEmpty()) {
-            send(new JSONObject().put("op", "key").put("key", 0xff0d), this::enter);
+            send(jq("op", "key", "key", 0xff0d), this::enter);
             return;
         }
         InputConnection ic = getCurrentInputConnection();
