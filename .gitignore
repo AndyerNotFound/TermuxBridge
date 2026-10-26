@@ -22,3 +22,4 @@ AndroidManifest.xml.bak
 .idea/
 .vscode/
 *.swp
+local.properties

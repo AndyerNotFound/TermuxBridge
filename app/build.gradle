@@ -31,6 +31,13 @@ android {
             signingConfig signingConfigs.release
         }
     }
+
+    // Termux lint breaks on the SDK XML ("For input string: 37.0"); CI still runs it
+    if (System.getenv("TBRIDGE_SKIP_LINT") != null) {
+        lint {
+            checkReleaseBuilds false
+        }
+    }
 }
 
 dependencies {
