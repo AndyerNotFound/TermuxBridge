@@ -466,6 +466,21 @@ public final class OverlayManager {
         return o;
     }
 
+    /** window entry by id (overlay.animate / AnimJob) */
+    static Entry entry(String id) { synchronized (WINDOWS) { return WINDOWS.get(id); } }
+
+    /** snapshot of all entries (AnimJob identity scan) */
+    static java.util.Map<String, Entry> allEntries() {
+        synchronized (WINDOWS) { return new java.util.LinkedHashMap<>(WINDOWS); }
+    }
+
+    /** set the corner radius of the root background (overlay.animate radius) */
+    static void setWindowRadius(View root, float radiusPx) {
+        android.graphics.drawable.Drawable bg = root.getBackground();
+        if (bg instanceof GradientDrawable) ((GradientDrawable) bg).setCornerRadius(radiusPx);
+        root.invalidate();
+    }
+
     static JSONArray ids() {
         JSONArray a = new JSONArray();
         for (String s : WINDOWS.keySet()) a.put(s);
@@ -1007,6 +1022,20 @@ public final class OverlayManager {
                 v.setMinimumHeight(Math.max(1, dp(ctx, n.optDouble("h", 1))));
                 return v;
             }
+            case "ring": {
+                RingNode rv = new RingNode(ctx);
+                rv.applySpec(n, ctx);
+                common(rv, n, ctx);
+                return rv;
+            }
+            case "image": {
+                ImgNode im = new ImgNode(ctx);
+                im.applyScale(n.optString("scale", "fill"));
+                im.applyCommon(n, ctx);
+                im.applySrc(n.optString("src", ""));
+                common(im, n, ctx);
+                return im;
+            }
             case "text":
             default: {
                 TextView tv = new TextView(ctx);
@@ -1247,6 +1276,21 @@ public final class OverlayManager {
             case "spacer": {
                 if (v.getClass() != View.class) return false;
                 common(v, n, ctx);
+                return true;
+            }
+            case "ring": {
+                if (!(v instanceof RingNode)) return false;
+                ((RingNode) v).applySpec(n, ctx);
+                common(v, n, ctx);
+                return true;
+            }
+            case "image": {
+                if (!(v instanceof ImgNode)) return false;
+                ImgNode im = (ImgNode) v;
+                im.applyScale(n.optString("scale", "fill"));
+                im.applyCommon(n, ctx);
+                im.applySrc(n.optString("src", ""));
+                common(im, n, ctx);
                 return true;
             }
             case "text":

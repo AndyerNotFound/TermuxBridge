@@ -21,7 +21,14 @@ public class BridgeNotifListener extends NotificationListenerService {
 
     @Override public void onListenerConnected() { connected = true; INSTANCE = this; }
 
-    @Override public void onListenerDisconnected() { connected = false; INSTANCE = null; }
+    @Override public void onListenerDisconnected() {
+        connected = false; INSTANCE = null;
+        // Android >= 24: ask the system to rebind (recovery after force-stop /
+        // ColorOS listener snooze) - no user interaction needed
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            try { requestRebind(null); } catch (Throwable ignored) {}
+        }
+    }
 
     @Override public void onNotificationPosted(StatusBarNotification sbn) {
         JSONObject o = toJson(sbn);
@@ -34,6 +41,23 @@ public class BridgeNotifListener extends NotificationListenerService {
             RECENT.addFirst(o);
             while (RECENT.size() > CAP) RECENT.removeLast();
         }
+        // notify watchers on the overlay event stream (overlay.events)
+        OverlayManager.pushEvent(notifEvent(o, "notif"));
+    }
+
+    private static JSONObject notifEvent(JSONObject n, String gesture) {
+        JSONObject e = new JSONObject();
+        try {
+            e.put("type", "notif");
+            e.put("gesture", gesture);
+            e.put("key", n.optString("key"));
+            e.put("pkg", n.optString("pkg"));
+            e.put("title", n.optString("title"));
+            e.put("text", n.optString("text"));
+            e.put("ntime", n.optLong("time"));
+            e.put("ts", System.currentTimeMillis());
+        } catch (Exception ignored) {}
+        return e;
     }
 
     @Override public void onNotificationRemoved(StatusBarNotification sbn) {
@@ -43,6 +67,9 @@ public class BridgeNotifListener extends NotificationListenerService {
                 if (key.equals(it.next().optString("key"))) it.remove();
             }
         }
+        JSONObject n = new JSONObject();
+        try { n.put("key", key); } catch (Exception ignored) {}
+        OverlayManager.pushEvent(notifEvent(n, "notif:remove"));
     }
 
     private static JSONObject toJson(StatusBarNotification sbn) {

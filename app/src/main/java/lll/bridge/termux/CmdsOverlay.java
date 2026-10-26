@@ -96,6 +96,14 @@ final class CmdsOverlay {
                     .put("fps_est", pct(50) > 0 ? Math.round(1000 / pct(50)) : 0);
         });
 
+        r.put("overlay.animate", (ctx, p) -> {
+            String aid = p.optString("id", "");
+            OverlayManager.Entry ae = OverlayManager.entry(aid);
+            if (ae == null) return Dispatcher.err("no such window: " + aid);
+            return AnimJob.start(ae, p) ? Dispatcher.ok().put("started", true)
+                                        : Dispatcher.err("missing 'to' object");
+        });
+
         r.put("overlay.perm", (ctx, p) -> {
             boolean ok = OverlayManager.granted(ctx);
             if (!ok && p.optBoolean("request", false)) {
