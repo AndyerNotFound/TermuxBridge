@@ -1,13 +1,13 @@
 # TermuxBridge
 
-A bridge between [Termux](https://termux.dev) and Android system capabilities that a pure CLI cannot reach: a foreground service + a local JSON interface on an abstract unix socket + a CLI client `tb`.
+A bridge between [Termux](https://termux.dev) and Android system capabilities that a pure CLI cannot reach: a foreground service, a JSON interface over explicit broadcasts, and a CLI client `tb`.
 
-> **v2.0.0 breaking change:** the TCP listener (127.0.0.1:8021) is gone. The transport is now the abstract-namespace unix socket `lll.bridge.termux` (AF_UNIX), with a peer-uid gate (bridge app, Termux, shell 2000, root). Same one-line-JSON wire format; clients must switch to AF_UNIX.
+> **v2.0.1 breaking change:** the transport is `am broadcast -n lll.bridge.termux/.BridgeReceiver -a lll.bridge.termux.CMD --es json '<request>'`; the request carries `--es res 127.0.0.1:PORT` and the app writes the one-line JSON response back to that loopback listener. The v2.0.0 abstract unix socket `lll.bridge.termux` is gone: on-device SELinux denies cross-app `connect()` (untrusted_app_27 -> untrusted_app, EACCES) even while the server listens. Broadcasts travel over binder and loopback TCP is not domain-gated, so Termux, shell and root all work. Callers are gated by sender uid (API 34+) plus the optional token.
 
 One line of JSON in, one line of JSON out — screenshots, notifications, clipboard, sensors, TTS/STT, touch injection, UI tree dumps, overlay windows and more.
 
 - Package: `lll.bridge.termux`
-- Transport: abstract unix socket `lll.bridge.termux` (AF_UNIX; Node path `"\0lll.bridge.termux"`, Android `LocalSocket`, Python `"\0" + name`)
+- Transport: explicit broadcast to `lll.bridge.termux/.BridgeReceiver` (action `lll.bridge.termux.CMD`), response written back to a loopback listener the caller owns (`res` extra)
 - Access control: peer uid must be the app itself, `com.termux`, `shell` (2000) or `root`; an optional shared token can be set on top
 - Requirements: Android 9+ (minSdk 28); verified on Android 16, arm64
 - License: AGPL-3.0
@@ -49,7 +49,7 @@ rish -c "settings put secure enabled_accessibility_services lll.bridge.termux/ll
 One JSON request line → one JSON response line, one connection per request.
 
 ```bash
-python3 -c 'import socket;s=socket.socket(socket.AF_UNIX);s.connect("\0lll.bridge.termux");s.sendall(b'{"cmd":"battery"}\n');print(s.recv(4096).decode())'"
+python3 -c 'import tbridge; print(tbridge.Bridge().battery())'
 # {"ok":true,"level":22,"charging":false,"status":"discharging","temp":39.3,"voltage":3.42}
 ```
 
@@ -219,7 +219,8 @@ The legacy zero-dep pipeline (`build.sh`, aapt2/d8 by hand) is deprecated since 
 
 ```
 src/lll/bridge/termux/
-  BridgeService.java        Foreground service + local-socket server (uid gate)
+  BridgeReceiver.java       Request channel: broadcast in, loopback callback out
+  BridgeService.java        Foreground service (lifecycle, notification, panic flag)
   Dispatcher.java           Command routing + feature toggles
   Cmds*.java                Feature modules
   BridgeA11yService.java    Accessibility: screenshots / gestures / UI tree

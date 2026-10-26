@@ -47,7 +47,7 @@ public class BridgeWidgetProvider extends AppWidgetProvider {
         } catch (Throwable ignored) {}
 
         String body = (pct >= 0 ? pct + "%" : "—")
-                + " · @" + BridgeService.SOCKET_NAME
+                + " · broadcast"
                 + "\n" + new SimpleDateFormat("HH:mm:ss", Locale.US).format(new Date());
         rv.setTextViewText(R.id.w_body, body);
 

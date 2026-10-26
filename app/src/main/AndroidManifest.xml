@@ -5,6 +5,9 @@
     android:versionCode="11"
     android:versionName="1.8.0">
     <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="36"/>
+    <!-- loopback callback socket for the broadcast transport: without INTERNET every
+         AF_INET socket() fails with EPERM, even on 127.0.0.1 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"/>

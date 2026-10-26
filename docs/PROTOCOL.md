@@ -1,9 +1,28 @@
 # TermuxBridge — Overlay protocol reference
 
-Wire format (all commands): one JSON request line → one JSON response line over
-the abstract unix socket `lll.bridge.termux` (v2.0; the old TCP port is gone),
-one connection per request. Peers are uid-gated (app, Termux, shell, root).
-Errors are always
+Wire format (all commands): one JSON request → one JSON response line.
+
+v2.0.1 transport:
+
+```bash
+am broadcast -n lll.bridge.termux/.BridgeReceiver -a lll.bridge.termux.CMD \
+    --es json '{"cmd":"battery","token":"..."}' --es res 127.0.0.1:41234
+```
+
+The caller binds an ephemeral loopback port and passes it as the string extra
+`res` (same idea as Termux:API's `socket_output`); the app
+connects back and writes the response line. Without `res` the call is
+fire-and-forget and the response only reaches logcat (`TBridge`). An explicit
+component (`-n`) is mandatory: implicit broadcasts to a background app are
+dropped by background-execution policy ("skipped by policy at enqueue").
+
+The v2.0.0 abstract unix socket is gone — SELinux Enforcing denies cross-app
+`connect()` from Termux (untrusted_app_27) to this app (untrusted_app) with
+EACCES, verified on device 2026-10-27.
+
+Callers are gated by sender uid on API 34+ (Termux, shell, root, self) and by
+the optional token (`TBRIDGE_TOKEN`); set a token in the app if untrusted apps
+share the device. Errors are always
 `{"ok":false,"error":"..."}` — error strings are machine-readable and stay
 English-only regardless of system locale. Command overview: see
 [README](../README.md); this page documents the overlay event stream and the
@@ -33,12 +52,11 @@ The buffer holds the last 500 events; `seq` is monotonic per service lifetime.
 
 | Command | Params | Response |
 |---|---|---|
-| `panic.stop` | — | cuts everything at once: overlay windows removed, a11y `disableSelf()` (system clears enabled_accessibility_services), notif listener unbound, socket accept-loop gated, foreground service stopped, START_STICKY broken, boot auto-start suppressed |
+| `panic.stop` | — | cuts everything at once: overlay windows removed, a11y `disableSelf()` (system clears enabled_accessibility_services), notif listener unbound, requests refused, foreground service stopped, START_STICKY broken, boot auto-start suppressed |
 | `panic.status` | — | `panicked`, `a11y`, `notif`, `service_up` |
 
-While panicked the socket accept-loop still accepts one connection per request and
-answers `{"ok":false,"error":"panicked - restart service to recover"}`-style
-status replies; the broadcast channel refuses everything. Recovery: `am start-
+While panicked every request is answered with
+`{"ok":false,"error":"panicked - restart service to recover"}`. Recovery: `am start-
 foreground-service -n lll.bridge.termux/.BridgeService -a lll.bridge.START`
 (clears the flag) or the MainActivity PANIC-adjacent start button.
 

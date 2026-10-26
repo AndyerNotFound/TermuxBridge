@@ -6,7 +6,8 @@ tbridge \- TermuxBridge 命令行 (Termux:API 风格)
 .I command
 .RI [ args ]
 .SH DESCRIPTION
-通过抽象 unix socket lll.bridge.termux 上的 TermuxBridge Android 应用调用系统能力:
+通过显式广播 lll.bridge.termux.CMD 调用 TermuxBridge Android 应用 (应用连回本进程的
+127.0.0.1 端口回包), 获取系统能力:
 通知、剪贴板、传感器、定位、TTS/STT、截图、模拟触控、UI 树导出。
 .SH ENVIRONMENT
 TBRIDGE_TOKEN, TBRIDGE_TIMEOUT.

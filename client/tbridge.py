@@ -1,23 +1,26 @@
 """TermuxBridge 客户端库(纯标准库, 无第三方依赖)。
 
     import tbridge
-    b = tbridge.Bridge()                 # 默认抽象 unix socket lll.bridge.termux
+    b = tbridge.Bridge()
     b.toast("构建完成")
     print(b.battery()["level"])
     open("s.png","wb").write(b.screenshot())
 
-所有方法返回 dict; 失败时抛 tbridge.BridgeError。
+传输: 显式广播 lll.bridge.termux.CMD 下发请求, APP 连回本进程的 127.0.0.1
+临时端口回包。所有方法返回 dict; 失败时抛 tbridge.BridgeError。
 """
 
 import base64
 import json
 import os
 import socket
+import subprocess
 
 __all__ = ["Bridge", "BridgeError"]
 
-DEFAULT_SOCK = "\0" + os.environ.get("TBRIDGE_SOCK", "lll.bridge.termux")
 DEFAULT_TOKEN = os.environ.get("TBRIDGE_TOKEN", "")
+RECEIVER = "lll.bridge.termux/.BridgeReceiver"
+ACTION = "lll.bridge.termux.CMD"
 
 
 class BridgeError(RuntimeError):
@@ -25,8 +28,9 @@ class BridgeError(RuntimeError):
 
 
 class Bridge:
-    def __init__(self, sock=DEFAULT_SOCK, token=DEFAULT_TOKEN, timeout=30.0):
-        self.sock, self.token, self.timeout = sock, token, timeout
+    def __init__(self, sock=None, token=DEFAULT_TOKEN, timeout=30.0, receiver=RECEIVER):
+        # sock kept for backwards compatibility; the transport is broadcast-based
+        self.token, self.timeout, self.receiver = token, timeout, receiver
 
     # ---------- 底层 ----------
     def call(self, cmd, **params):
@@ -34,23 +38,40 @@ class Bridge:
         if self.token:
             req["token"] = self.token
         req.update(params)
-        payload = (json.dumps(req, ensure_ascii=False) + "\n").encode()
+
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        buf = b""
         try:
-            sk = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            with sk:
-                sk.settimeout(self.timeout)
-                sk.connect(self.sock)
-                sk.sendall(payload)
-                buf = b""
+            srv.bind(("127.0.0.1", 0))
+            srv.listen(1)
+            srv.settimeout(self.timeout)
+            callback = "127.0.0.1:%d" % srv.getsockname()[1]
+            try:
+                subprocess.run(["am", "broadcast", "-n", self.receiver, "-a", ACTION,
+                                "--es", "json", json.dumps(req, ensure_ascii=False),
+                                "--es", "res", callback],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=min(self.timeout, 30))
+            except Exception as e:
+                raise BridgeError(f"广播发送失败: {e}") from e
+            try:
+                conn, _ = srv.accept()
+            except socket.timeout as e:
+                raise BridgeError(
+                    "无响应 — 确认 TermuxBridge 已启动 (tbridge-service start), token 是否匹配") from e
+            with conn:
+                conn.settimeout(self.timeout)
                 while not buf.endswith(b"\n"):
-                    chunk = sk.recv(65536)
+                    chunk = conn.recv(65536)
                     if not chunk:
                         break
                     buf += chunk
-        except OSError as e:
-            raise BridgeError(f"连不上 {self.sock!r} — {e}") from e
+        finally:
+            srv.close()
+
         if not buf.strip():
-            raise BridgeError("空响应(服务未运行? 端口/token 不对?)")
+            raise BridgeError("空响应(APP 未回包)")
         resp = json.loads(buf.decode())
         if not resp.get("ok"):
             raise BridgeError(resp.get("error", "unknown error"))
