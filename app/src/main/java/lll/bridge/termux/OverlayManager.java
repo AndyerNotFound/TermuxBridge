@@ -1318,17 +1318,20 @@ public final class OverlayManager {
         JSONObject node = req.optJSONObject("view") != null ? req.optJSONObject("view") : req;
         if (node == null) return Dispatcher.err("empty view");
 
-        long t0 = System.nanoTime();
-        e.inputs.clear();
-        boolean inPlace = patch(e.root, node, ctx, id, e);
         WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
-        if (!inPlace) {
-            View nr = build(ctx, node, id, e);
-            if (nr == null) return Dispatcher.err("empty view");
-            wm.removeView(e.root);
-            e.root = nr;
-            e.stops.clear();
-            wm.addView(nr, e.lp);
+        long t0 = System.nanoTime();
+        boolean inPlace = true;
+        if (req.optJSONObject("view") != null) {     // view-less update = window-level only:
+            e.inputs.clear();                        // move/resize a window WITHOUT rebuilding
+            inPlace = patch(e.root, node, ctx, id, e);   // its view tree (the old fallback
+            if (!inPlace) {                          //  patched req as a text node and wiped
+                View nr = build(ctx, node, id, e);   //  the window)
+                if (nr == null) return Dispatcher.err("empty view");
+                wm.removeView(e.root);
+                e.root = nr;
+                e.stops.clear();
+                wm.addView(nr, e.lp);
+            }
         }
 
         // 窗口级参数(x/y/w/h/blur)可选更新

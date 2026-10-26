@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION=1.10.0
+VERSION=1.10.1
 PKG=tbridge
 ROOT=build/pkg
 PREFIX_DIR="$ROOT/data/data/com.termux/files/usr"
